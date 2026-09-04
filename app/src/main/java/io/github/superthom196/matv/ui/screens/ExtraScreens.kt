@@ -1,5 +1,12 @@
 package io.github.superthom196.matv.ui.screens
 
+import io.github.superthom196.matv.ui.StatusDot
+import io.github.superthom196.matv.ui.MenuAction
+import io.github.superthom196.matv.ui.ActionMenu
+import io.github.superthom196.matv.ma.Player
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -124,20 +131,57 @@ fun SettingsScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
     val s by vm.settings.collectAsStateWithLifecycle()
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    var menuFor by remember { mutableStateOf<Player?>(null) }
+    menuFor?.let { p ->
+        val selected = ui.selectedPlayer
+        val synced = p.syncedTo != null || !p.groupMembers.isNullOrEmpty()
+        ActionMenu(p.name, p.provider.replace('_', ' '), buildList {
+            add(MenuAction("Use this player") { vm.selectPlayer(p.playerId) })
+            if (selected != null && selected.playerId != p.playerId) add(MenuAction("Sync with ${selected.name}") { vm.groupPlayer(p.playerId, selected.playerId) })
+            if (synced) add(MenuAction("Unsync", danger = true) { vm.ungroupPlayer(p.playerId) })
+        }, onDismiss = { menuFor = null })
+    }
     val tabNames = listOf("artists" to "Artists", "albums" to "Albums", "folders" to "Folders", "favourites" to "Favourites")
+    val players = ui.selectablePlayers
     Column(Modifier.fillMaxSize().padding(start = 28.dp, end = 28.dp, top = 20.dp)) {
         Text("Settings", style = MaterialTheme.typography.headlineMedium)
-        VSpace(14.dp)
-        Column(Modifier.width(720.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        VSpace(10.dp)
+        Column(Modifier.width(760.dp).fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            SectionLabel("Play on  ·  ${players.size} players found")
+            if (players.isEmpty()) Text("No players yet. Check your endpoints are running and enabled in Music Assistant.", style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted)
+            players.forEachIndexed { i, p ->
+                val isSel = p.playerId == ui.selectedPlayerId
+                FocusSurface(
+                    onClick = { vm.selectPlayer(p.playerId) }, onLongClick = { menuFor = p },
+                    modifier = (if (i == 0) Modifier.focusRequester(first) else Modifier).fillMaxWidth(),
+                    container = if (isSel) HiFiColors.SurfaceHigh else HiFiColors.Surface,
+                ) {
+                    Row(Modifier.padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        StatusDot(when { p.isPlaying -> HiFiColors.Good; p.powered == false -> HiFiColors.Muted; else -> HiFiColors.Accent })
+                        HSpace(12.dp)
+                        Column(Modifier.weight(1f)) {
+                            Text(p.name, style = MaterialTheme.typography.titleMedium)
+                            val detail = listOfNotNull(
+                                when { p.isPlaying -> "Playing: ${p.currentMedia?.title ?: ""}".trimEnd(':', ' '); p.playbackState == "paused" -> "Paused"; p.powered == false -> "Off"; else -> "Idle" },
+                                p.provider.replace('_', ' '), p.volumeLevel?.let { "vol $it" },
+                                if (p.syncedTo != null) "synced" else null, p.groupMembers?.takeIf { it.isNotEmpty() }?.let { "group of ${it.size}" },
+                            ).joinToString("  ·  ")
+                            Text(detail, style = MaterialTheme.typography.bodySmall, color = HiFiColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        if (isSel) Text("Selected", style = MaterialTheme.typography.labelMedium, color = HiFiColors.Accent)
+                    }
+                }
+            }
+            Text("OK selects a player. Long-press to sync it with the selected one.", style = MaterialTheme.typography.bodySmall, color = HiFiColors.Muted)
+            VSpace(10.dp)
             SectionLabel("Library")
-            SettingRow("Open on", tabNames.firstOrNull { it.first == s.defaultTab }?.second ?: "Artists", modifier = Modifier.focusRequester(first)) {
+            SettingRow("Open on", tabNames.firstOrNull { it.first == s.defaultTab }?.second ?: "Artists") {
                 val i = tabNames.indexOfFirst { it.first == s.defaultTab }; vm.updateSettings { it.copy(defaultTab = tabNames[(i + 1) % tabNames.size].first) }
             }
             SettingRow("Playlists tab", if (s.showPlaylists) "On" else "Off") { vm.updateSettings { it.copy(showPlaylists = !it.showPlaylists) } }
             SettingRow("Radio tab", if (s.showRadio) "On" else "Off") { vm.updateSettings { it.copy(showRadio = !it.showRadio) } }
             VSpace(10.dp)
-            SectionLabel("Player and server")
-            SettingRow("Player", ui.selectedPlayer?.name ?: "none") { nav.push(MainScreen.Players) }
+            SectionLabel("Server")
             SettingRow("Server", "${ui.server?.name ?: ""}  ·  ${ui.baseUrl ?: ""}") { }
             SettingRow("Signed in as", ui.username ?: "") { }
             VSpace(10.dp)
@@ -146,6 +190,7 @@ fun SettingsScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
             SettingRow("Music Assistant", "v${ui.server?.serverVersion ?: "?"}  ·  schema ${ui.server?.schemaVersion ?: "?"} (needs ≥ $MIN_SCHEMA_VERSION)") { }
             VSpace(16.dp)
             Row { PillButton("Forget server and sign out", onClick = { vm.forgetServer() }) }
+            VSpace(40.dp)
         }
     }
 }

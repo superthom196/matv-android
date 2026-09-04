@@ -119,8 +119,6 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
             HSpace(6.dp)
             NowPlayingChip(ui, onClick = { nav.push(MainScreen.NowPlaying) })
             HSpace(6.dp)
-            PlayerChip(ui, onClick = { nav.push(MainScreen.Players) })
-            HSpace(6.dp)
             IconChip(Icons.Default.Settings, "Settings", onClick = { nav.push(MainScreen.Settings) })
         }
         VSpace(10.dp)
@@ -252,7 +250,7 @@ fun NowPlayingChip(ui: UiState, onClick: () -> Unit) {
             Text(
                 if (np.hasMedia) np.title else "Now playing",
                 style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 140.dp),
+                modifier = Modifier.widthIn(max = 200.dp),
             )
         }
     }

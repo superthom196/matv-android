@@ -47,7 +47,7 @@ set); with 3 GB it thrashes for 10+ minutes.
 
 1. The app scans your LAN for Music Assistant (`GET /info` on :8095 and mDNS). Pick a server or type its address.
 2. Sign in with your Music Assistant username and password. The TV keeps a long-lived token afterwards.
-3. Choose which player to drive. Change it any time from the player chip.
+3. Choose which player to drive. Change it any time from Settings (the gear).
 
 ## Browsing
 
@@ -63,10 +63,10 @@ set); with 3 GB it thrashes for 10+ minutes.
 - **Long-press OK** on anything playable for Play now / Play next / Add to queue / Shuffle / Favourite.
 - **Queue** (from Now Playing): what the selected player has queued, current track highlighted. OK jumps to
   a track; long-press to move it up or down or remove it; Clear empties the queue.
-- **Players**: long-press a player to sync it with the selected one, or unsync it.
 - **Media keys** on the remote work on every screen, and the app registers a media session so they keep
   working while another app is in front.
-- **Settings** (gear in the header): default tab, optional tabs, player, server and version info, sign out.
+- **Settings** (gear in the header): the players Music Assistant has found (OK selects, long-press syncs or
+  unsyncs), default tab, optional tabs, server and version info, sign out.
 
 ## Layout
 
