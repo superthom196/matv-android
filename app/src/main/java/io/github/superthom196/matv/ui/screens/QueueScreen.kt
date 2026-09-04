@@ -113,7 +113,8 @@ private fun QueueRow(index: Int, item: QueueItem, isCurrent: Boolean, imageUrl: 
             HSpace(14.dp)
             Column(Modifier.weight(1f)) {
                 Text(
-                    item.name, style = MaterialTheme.typography.titleMedium,
+                    // Queue item names are "Artist - Title"; the artist already sits on the line below.
+                    item.mediaItem?.name?.takeIf { it.isNotBlank() } ?: item.name, style = MaterialTheme.typography.titleMedium,
                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
                     color = if (isCurrent) HiFiColors.Accent else HiFiColors.Text,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
