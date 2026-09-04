@@ -13,6 +13,7 @@ import io.github.superthom196.matv.ma.MaDiscovery
 import io.github.superthom196.matv.ma.MediaItem
 import io.github.superthom196.matv.ma.Player
 import io.github.superthom196.matv.ma.PlayerQueue
+import io.github.superthom196.matv.ma.QueueItem
 import io.github.superthom196.matv.ma.Prefs
 import io.github.superthom196.matv.ma.SavedConfig
 import io.github.superthom196.matv.ma.ServerInfo
@@ -50,6 +51,7 @@ data class NowPlaying(
     val queueName: String = "",
     val shuffle: Boolean = false,
     val repeat: String = "off",
+    val queueItemId: String? = null,
 ) {
     val hasMedia: Boolean get() = title.isNotBlank()
     val isPlaying: Boolean get() = state == "playing"
@@ -99,6 +101,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
+
+    /** Items of the selected player's queue; only kept fresh while the Queue screen is showing. */
+    data class QueueView(val items: List<QueueItem> = emptyList(), val currentIndex: Int? = null, val loading: Boolean = false, val error: String? = null)
+    private val _queue = MutableStateFlow(QueueView())
+    val queue: StateFlow<QueueView> = _queue.asStateFlow()
+    @Volatile private var queueVisible = false
 
     private val _folders = MutableStateFlow<List<FolderLevel>>(emptyList())
     /** Folder browser stack; empty until the Folders tab is first opened. */
@@ -308,7 +316,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             "queue_updated", "queue_items_updated", "queue_added" -> {
                 val q = runCatching { maJson.decodeFromJsonElement(PlayerQueue.serializer(), data) }.getOrNull() ?: return
                 queues[q.queueId] = q
-                if (q.queueId == _ui.value.activeQueueId) recomputeNowPlaying()
+                if (q.queueId == _ui.value.activeQueueId) {
+                    recomputeNowPlaying()
+                    if (queueVisible && (event == "queue_items_updated" || q.currentIndex != _queue.value.currentIndex)) refreshQueue()
+                }
             }
             "queue_time_updated" -> {
                 val id = objectId ?: return
@@ -347,6 +358,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             queueName = q?.displayName ?: player?.name ?: "",
             shuffle = q?.shuffleEnabled ?: false,
             repeat = q?.repeatMode ?: "off",
+            queueItemId = cur?.queueItemId ?: pm?.queueItemId,
         )
         _ui.update { it.copy(nowPlaying = np) }
         ensureTicker(np.isPlaying)
@@ -456,6 +468,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return flow
     }
 
+    // ------------------------------------------------------------------ queue
+
+    fun setQueueVisible(visible: Boolean) {
+        queueVisible = visible
+        if (visible) refreshQueue()
+    }
+
+    fun refreshQueue() {
+        val qid = _ui.value.activeQueueId ?: run { _queue.value = QueueView(error = "No active queue"); return }
+        _queue.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            try {
+                val items = client.queueItems(qid)
+                _queue.value = QueueView(items = items, currentIndex = queues[qid]?.currentIndex, loading = false)
+            } catch (e: Exception) {
+                _queue.update { it.copy(loading = false, error = e.message ?: "Failed to load queue") }
+            }
+        }
+    }
+
+    fun playQueueIndex(index: Int) {
+        val qid = _ui.value.activeQueueId ?: return
+        cmd { client.playIndex(qid, index) }
+    }
+
     // ------------------------------------------------------------------ folder browser
 
     fun ensureFoldersLoaded() { if (_folders.value.isEmpty()) openFolder(null) }
@@ -465,6 +502,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Push a level and load it. `null` loads the root (one entry per provider). */
     fun openFolder(folder: MediaItem?) {
         val level = FolderLevel(nextFolderId++, folder)
+        // The root list never grabs focus on its own (that hijacks walking along the tab row); only
+        // levels the user opens do.
+        if (folder == null) folderLevelAutoFocused = level.id
         _folders.update { if (folder == null) listOf(level) else it + level }
         viewModelScope.launch {
             try {

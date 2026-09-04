@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -85,6 +86,8 @@ fun NowPlayingScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
                 // Player chip / state
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     PillButton(player?.name ?: "Choose player", onClick = { nav.push(MainScreen.Players) })
+                    HSpace(10.dp)
+                    PillButton("Queue", onClick = { nav.push(MainScreen.Queue) }, icon = Icons.AutoMirrored.Filled.QueueMusic)
                     HSpace(14.dp)
                     Text(
                         when (np.state) { "playing" -> "Playing"; "paused" -> "Paused"; else -> "Idle" },

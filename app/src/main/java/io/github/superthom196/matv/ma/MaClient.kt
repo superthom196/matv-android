@@ -362,6 +362,11 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
     suspend fun playlistTracks(item: MediaItem): List<MediaItem> =
         decodeList(send("music/playlists/playlist_tracks", "item_id" to item.itemId, "provider_instance_id_or_domain" to item.provider), MediaItem.serializer(), "track")
 
+    suspend fun queueItems(queueId: String, offset: Int = 0, limit: Int = 500): List<QueueItem> =
+        decodeList(send("player_queues/items", "queue_id" to queueId, "offset" to offset, "limit" to limit), QueueItem.serializer(), "queue item")
+
+    suspend fun playIndex(queueId: String, index: Int) { send("player_queues/play_index", "queue_id" to queueId, "index" to index) }
+
     /** Folder-style browsing across providers, like the web UI's Browse page. `null` = root. */
     suspend fun browse(path: String?): List<MediaItem> =
         decodeList(send("music/browse", "path" to path), MediaItem.serializer(), "browse item")

@@ -68,11 +68,11 @@ import io.github.superthom196.matv.ui.VSpace
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
-private val tabs = listOf("folders" to "Folders", "artists" to "Artists", "albums" to "Albums")
+private val tabs = listOf("artists" to "Artists", "albums" to "Albums", "folders" to "Folders")
 
 @Composable
 fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
-    var tab by rememberSaveable { mutableIntStateOf(0) } // Folders first: the fastest way through a big collection
+    var tab by rememberSaveable { mutableIntStateOf(0) } // opens on Artists
     val kind = tabs[tab].first
     val page by vm.library.page(kind).collectAsStateWithLifecycle()
     // Note: the composed `page` can lag one frame behind a tab switch, so ask the store directly.

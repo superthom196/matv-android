@@ -31,12 +31,14 @@ import io.github.superthom196.matv.ui.screens.LoadingScreen
 import io.github.superthom196.matv.ui.screens.LoginScreen
 import io.github.superthom196.matv.ui.screens.NowPlayingScreen
 import io.github.superthom196.matv.ui.screens.PlayersScreen
+import io.github.superthom196.matv.ui.screens.QueueScreen
 
 /** Screens inside the connected app. A plain in-memory back stack; Back pops, exits at the root. */
 sealed class MainScreen {
     data object Library : MainScreen()
     data object Players : MainScreen()
     data object NowPlaying : MainScreen()
+    data object Queue : MainScreen()
     data class Detail(val item: MediaItem) : MainScreen()
 }
 
@@ -95,6 +97,7 @@ private fun MainFlow(vm: AppViewModel) {
             if (nav.stack.size > 1) nav.pop() else nav.replaceRoot(MainScreen.Library)
         })
         MainScreen.NowPlaying -> NowPlayingScreen(vm, ui, nav)
+        MainScreen.Queue -> QueueScreen(vm, ui, nav)
         is MainScreen.Detail -> DetailScreen(vm, ui, nav, s.item)
     }
 }
