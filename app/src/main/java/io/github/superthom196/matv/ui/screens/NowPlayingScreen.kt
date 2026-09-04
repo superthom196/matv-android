@@ -112,13 +112,14 @@ fun NowPlayingScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
                 VSpace(18.dp)
                 // Progress
                 val dur = np.duration ?: 0.0
-                val frac = if (dur > 0) (np.elapsed / dur).coerceIn(0.0, 1.0).toFloat() else 0f
+                val elapsed = if (dur > 0) np.elapsed.coerceAtMost(dur) else np.elapsed
+                val frac = if (dur > 0) (elapsed / dur).coerceIn(0.0, 1.0).toFloat() else 0f
                 Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(Color(0x33FFFFFF))) {
                     Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(HiFiColors.Accent))
                 }
                 VSpace(8.dp)
                 Row(Modifier.fillMaxWidth()) {
-                    Text(formatTime(np.elapsed), style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted)
+                    Text(formatTime(elapsed), style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted)
                     Box(Modifier.weight(1f))
                     Text(formatTime(np.duration), style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted)
                 }
