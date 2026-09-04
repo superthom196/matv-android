@@ -5,7 +5,23 @@
 account, browse the library, drive playback from the sofa. Controller only: audio
 plays on your existing Music Assistant endpoints.
 
-## Build
+## Install
+
+Grab `app-release.apk` from the [latest release](https://github.com/superthom196/matv-android/releases/latest)
+and side-load it — no build required:
+
+```bash
+adb connect <tv-ip>:5555
+adb install app-release.apk
+```
+
+Requires Android TV / Google TV, API 28+. The APK is debug-signed (not Play-listed),
+so allow installs from unknown sources if your TV asks. Reinstalling a build signed
+by a different machine needs `adb uninstall io.github.superthom196.matv` first.
+
+## Build from source
+
+Only needed if you want to change the code — most people should use the release APK above.
 
 ```bash
 ./build.sh
@@ -21,21 +37,11 @@ If Gradle can't find a JDK on your machine, set `org.gradle.java.home` in your o
 TV=<tv-ip>:5555 ./build.sh install
 ```
 
-Also installs and AOT-compiles the app and launches it on the TV at `TV`.
-
-## Install on a TV manually
-
-```bash
-adb connect <tv-ip>:5555
-adb install -r app/build/outputs/apk/release/app-release.apk
-```
-
-Use the **release** build, not a debug build straight from Android Studio — the
-unminified debug APK is large enough that ART's dex verification alone can cause an
-ANR on slower TV hardware. Gradle needs a big heap for R8 (`org.gradle.jvmargs=-Xmx8g`
-is set); with 3 GB it thrashes for 10+ minutes. Since each machine's release build is
-debug-signed with a different key, reinstalling a build from a different machine needs
-`adb uninstall` first.
+Also installs and AOT-compiles the app and launches it on the TV at `TV`. Use this
+**release** build, not a debug build straight from Android Studio — the unminified
+debug APK is large enough that ART's dex verification alone can cause an ANR on
+slower TV hardware. Gradle needs a big heap for R8 (`org.gradle.jvmargs=-Xmx8g` is
+set); with 3 GB it thrashes for 10+ minutes.
 
 ## First run
 
