@@ -1,0 +1,15 @@
+*.iml
+.DS_Store
+.gradle/
+.idea/
+.kotlin/
+app/build/
+build/
+local.properties
+dist/
+*.apk
+*.jks
+*.keystore
+*.p12
+.claude/
+FABLE_PROMPT.md

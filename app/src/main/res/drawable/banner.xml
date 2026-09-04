@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path android:fillColor="#0B0B0F" android:pathData="M0,0h320v180h-320z" />
+    <path android:fillColor="#15151C" android:pathData="M0,0h320v180h-320z M40,20 h240 a12,12 0 0 1 12,12 v116 a12,12 0 0 1 -12,12 h-240 a12,12 0 0 1 -12,-12 v-116 a12,12 0 0 1 12,-12 z" android:fillType="evenOdd" />
+    <path android:fillColor="#1C1C25" android:pathData="M40,20 h240 a12,12 0 0 1 12,12 v116 a12,12 0 0 1 -12,12 h-240 a12,12 0 0 1 -12,-12 v-116 a12,12 0 0 1 12,-12 z" />
+    <!-- vinyl disc -->
+    <path android:fillColor="#0B0B0F" android:pathData="M110,90 m-52,0 a52,52 0 1 0 104,0 a52,52 0 1 0 -104,0" />
+    <path android:fillColor="#2A2A36" android:pathData="M110,90 m-44,0 a44,44 0 1 0 88,0 a44,44 0 1 0 -88,0 M110,90 m-40,0 a40,40 0 1 1 80,0 a40,40 0 1 1 -80,0" android:fillType="evenOdd" />
+    <path android:fillColor="#2A2A36" android:pathData="M110,90 m-32,0 a32,32 0 1 0 64,0 a32,32 0 1 0 -64,0 M110,90 m-28,0 a28,28 0 1 1 56,0 a28,28 0 1 1 -56,0" android:fillType="evenOdd" />
+    <path android:fillColor="#F2A93B" android:pathData="M110,90 m-16,0 a16,16 0 1 0 32,0 a16,16 0 1 0 -32,0" />
+    <path android:fillColor="#0B0B0F" android:pathData="M110,90 m-3,0 a3,3 0 1 0 6,0 a3,3 0 1 0 -6,0" />
+    <!-- level bars -->
+    <path android:fillColor="#F2A93B" android:pathData="M190,120 h14 v-40 h-14z" />
+    <path android:fillColor="#F2A93B" android:pathData="M212,120 h14 v-64 h-14z" />
+    <path android:fillColor="#F2A93B" android:pathData="M234,120 h14 v-24 h-14z" />
+    <path android:fillColor="#F2A93B" android:pathData="M256,120 h14 v-50 h-14z" />
+    <!-- accent stripe -->
+    <path android:fillColor="#F2A93B" android:pathData="M40,150 h240 v4 h-240z" />
+</vector>
