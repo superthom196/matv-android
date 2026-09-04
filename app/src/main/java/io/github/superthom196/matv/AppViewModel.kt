@@ -104,6 +104,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Folder browser stack; empty until the Folders tab is first opened. */
     val folders: StateFlow<List<FolderLevel>> = _folders.asStateFlow()
     private var nextFolderId = 1L
+    /** Last folder level whose first row was auto-focused (UI bookkeeping, survives tab switches). */
+    var folderLevelAutoFocused: Long = -1L
 
     private val queues = java.util.concurrent.ConcurrentHashMap<String, PlayerQueue>()
     private var discoveryJob: Job? = null

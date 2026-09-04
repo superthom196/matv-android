@@ -65,8 +65,13 @@ fun FolderBrowser(vm: AppViewModel, ui: UiState, nav: Nav) {
     BackHandler(enabled = stack.size > 1) { vm.folderUp() }
 
     val firstFocus = remember { FocusRequester() }
+    // Auto-focus the first row only when a folder level is first shown (open / up), never when the
+    // Folders tab is merely re-entered: otherwise walking across the tab row gets hijacked by the list.
     LaunchedEffect(level?.id, level?.loading) {
-        if (level != null && !level.loading && level.items.isNotEmpty()) runCatching { firstFocus.requestFocus() }
+        if (level != null && !level.loading && level.items.isNotEmpty() && vm.folderLevelAutoFocused != level.id) {
+            vm.folderLevelAutoFocused = level.id
+            runCatching { firstFocus.requestFocus() }
+        }
     }
 
     Column(Modifier.fillMaxSize()) {

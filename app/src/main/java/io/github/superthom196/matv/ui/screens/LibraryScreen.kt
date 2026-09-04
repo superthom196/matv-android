@@ -24,7 +24,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.focus.FocusRequester
@@ -36,6 +35,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -60,8 +65,8 @@ import io.github.superthom196.matv.ui.MainScreen
 import io.github.superthom196.matv.ui.MediaCard
 import io.github.superthom196.matv.ui.Nav
 import io.github.superthom196.matv.ui.VSpace
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 
 private val tabs = listOf("folders" to "Folders", "artists" to "Artists", "albums" to "Albums")
 
@@ -71,7 +76,13 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
     val kind = tabs[tab].first
     val page by vm.library.page(kind).collectAsStateWithLifecycle()
     // Note: the composed `page` can lag one frame behind a tab switch, so ask the store directly.
-    LaunchedEffect(kind, ui.connection) { if (kind == "albums") vm.albums.ensureLoaded() else vm.library.ensureLoaded(kind) }
+    LaunchedEffect(kind, ui.connection) {
+        when (kind) {
+            "albums" -> vm.albums.ensureLoaded()
+            "folders" -> Unit // FolderBrowser loads itself via music/browse
+            else -> vm.library.ensureLoaded(kind)
+        }
+    }
     val tabFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { tabFocus.requestFocus() } }
 
@@ -160,7 +171,6 @@ private fun AlbumsGrid(vm: AppViewModel, nav: Nav) {
     }
 
     val gridState = rememberLazyGridState()
-    val scope = rememberCoroutineScope()
     var jump by remember { mutableStateOf<JumpRequest?>(null) }
     val itemFocus = remember { FocusRequester() }
     val focusIndex = jump?.index ?: 0
@@ -174,12 +184,24 @@ private fun AlbumsGrid(vm: AppViewModel, nav: Nav) {
         runCatching { itemFocus.requestFocus() }
     }
 
+    // The rail must feel instant on a slow TV: moving between letters only records the target,
+    // and the grid follows once the D-pad pauses, instead of composing a new page of covers per step.
+    val railFocus = remember { FocusRequester() }
+    var focusedIndex by remember { mutableIntStateOf(0) }
+    var followLetter by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(followLetter) {
+        val label = followLetter ?: return@LaunchedEffect
+        delay(140)
+        gridState.scrollToItem(indexForLetter(state.anchors, label))
+    }
+
     Row(Modifier.fillMaxSize()) {
         AlphabetRail(
             anchors = state.anchors,
             currentLabel = currentLabel,
-            onLetterFocused = { label -> scope.launch { gridState.scrollToItem(indexForLetter(state.anchors, label)) } },
+            onLetterFocused = { label -> followLetter = label },
             onEnterGrid = { label -> jump = JumpRequest(indexForLetter(state.anchors, label), (jump?.token ?: 0L) + 1) },
+            currentFocus = railFocus,
         )
         HSpace(10.dp)
         LazyVerticalGrid(
@@ -188,10 +210,20 @@ private fun AlbumsGrid(vm: AppViewModel, nav: Nav) {
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
             contentPadding = PaddingValues(bottom = 48.dp, top = 6.dp),
-            modifier = Modifier.fillMaxSize().focusRestorer(),
+            modifier = Modifier
+                .fillMaxSize()
+                .focusRestorer()
+                // Left from the first column hands focus to the A-Z rail (2D focus search does not find it on its own).
+                .onPreviewKeyEvent { ev ->
+                    if (ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionLeft && focusedIndex % 6 == 0) {
+                        runCatching { railFocus.requestFocus() }.isSuccess
+                    } else false
+                },
         ) {
             itemsIndexed(state.items, key = { _, it -> "${it.provider}:${it.itemId}" }) { index, item ->
-                val mod = if (index == focusIndex) Modifier.focusRequester(itemFocus) else Modifier
+                val mod = Modifier
+                    .onFocusChanged { if (it.isFocused) focusedIndex = index }
+                    .then(if (index == focusIndex) Modifier.focusRequester(itemFocus) else Modifier)
                 val url = vm.imageUrl(item, 256)
                 MediaCard(item, url, onClick = { nav.push(MainScreen.Detail(item)) }, modifier = mod)
             }

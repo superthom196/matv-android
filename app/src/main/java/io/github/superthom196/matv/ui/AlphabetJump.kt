@@ -20,6 +20,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -48,8 +50,11 @@ fun AlphabetRail(
     onLetterFocused: (label: String) -> Unit,
     onEnterGrid: (label: String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Attached to the letter the grid is currently showing, so the grid can hand focus back with Left. */
+    currentFocus: FocusRequester? = null,
 ) {
     val populated = remember(anchors) { anchors.map { it.label }.toSet() }
+    val focusTarget = if (currentLabel in populated) currentLabel else anchors.firstOrNull()?.label
     BoxWithConstraints(modifier.fillMaxHeight().width(36.dp)) {
         val rowHeight = (maxHeight / alphabet.size).coerceIn(12.dp, 24.dp)
         Column(Modifier.fillMaxHeight(), verticalArrangement = Arrangement.Top) {
@@ -61,6 +66,7 @@ fun AlphabetRail(
                     Modifier
                         .height(rowHeight)
                         .width(36.dp)
+                        .then(if (currentFocus != null && label == focusTarget) Modifier.focusRequester(currentFocus) else Modifier)
                         .then(
                             if (isPopulated) Modifier
                                 .onFocusChanged { f -> focused = f.isFocused; if (f.isFocused) onLetterFocused(label) }
