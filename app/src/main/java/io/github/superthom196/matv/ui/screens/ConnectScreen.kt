@@ -73,8 +73,11 @@ fun ConnectScreen(vm: AppViewModel, ui: UiState) {
         }
         HSpace(64.dp)
         Column(Modifier.fillMaxWidth()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                SectionLabel(if (ui.discovering) "Looking for Music Assistant on your network…" else "Servers found")
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                SectionLabel(
+                    if (ui.discovering) "Looking for Music Assistant on your network…" else "Servers found",
+                    modifier = Modifier.weight(1f),
+                )
                 HSpace(16.dp)
                 if (!ui.discovering) PillButton("Scan again", onClick = { vm.startDiscovery() }, icon = Icons.Default.Refresh)
             }

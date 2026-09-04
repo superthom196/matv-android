@@ -49,13 +49,11 @@ import io.github.superthom196.matv.AppViewModel
 import io.github.superthom196.matv.UiState
 import io.github.superthom196.matv.indexForLetter
 import io.github.superthom196.matv.labelAtIndex
-import io.github.superthom196.matv.stepAnchor
 import io.github.superthom196.matv.ui.Artwork
 import io.github.superthom196.matv.ui.FocusSurface
 import io.github.superthom196.matv.ui.HSpace
 import io.github.superthom196.matv.ui.HiFiColors
-import io.github.superthom196.matv.ui.LetterPickerDialog
-import io.github.superthom196.matv.ui.LetterTab
+import io.github.superthom196.matv.ui.AlphabetRail
 import io.github.superthom196.matv.ui.MainScreen
 import io.github.superthom196.matv.ui.MediaCard
 import io.github.superthom196.matv.ui.Nav
@@ -161,7 +159,6 @@ private fun AlbumsGrid(vm: AppViewModel, nav: Nav) {
 
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
-    var showPicker by remember { mutableStateOf(false) }
     var jump by remember { mutableStateOf<JumpRequest?>(null) }
     val itemFocus = remember { FocusRequester() }
     val focusIndex = jump?.index ?: 0
@@ -176,11 +173,11 @@ private fun AlbumsGrid(vm: AppViewModel, nav: Nav) {
     }
 
     Row(Modifier.fillMaxSize()) {
-        LetterTab(
-            currentLabel = { currentLabel },
-            onStep = { forward -> stepAnchor(state.anchors, gridState.firstVisibleItemIndex, forward)?.let { scope.launch { gridState.scrollToItem(it) } } },
-            onOpenPicker = { showPicker = true },
-            onEnterGrid = { runCatching { itemFocus.requestFocus() } },
+        AlphabetRail(
+            anchors = state.anchors,
+            currentLabel = currentLabel,
+            onLetterFocused = { label -> scope.launch { gridState.scrollToItem(indexForLetter(state.anchors, label)) } },
+            onEnterGrid = { label -> jump = JumpRequest(indexForLetter(state.anchors, label), (jump?.token ?: 0L) + 1) },
         )
         HSpace(10.dp)
         LazyVerticalGrid(
@@ -197,15 +194,6 @@ private fun AlbumsGrid(vm: AppViewModel, nav: Nav) {
                 MediaCard(item, url, onClick = { nav.push(MainScreen.Detail(item)) }, modifier = mod)
             }
         }
-    }
-
-    if (showPicker) {
-        LetterPickerDialog(
-            anchors = state.anchors,
-            currentLabel = currentLabel,
-            onPick = { label -> showPicker = false; jump = JumpRequest(indexForLetter(state.anchors, label), (jump?.token ?: 0L) + 1) },
-            onDismiss = { showPicker = false },
-        )
     }
 }
 
