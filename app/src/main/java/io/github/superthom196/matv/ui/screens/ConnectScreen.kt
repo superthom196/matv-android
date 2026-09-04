@@ -86,7 +86,7 @@ fun ConnectScreen(vm: AppViewModel, ui: UiState) {
                 Text("Nothing found yet. Make sure the TV and the server are on the same network, or type the address on the left.",
                     style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted)
             }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 4.dp)) {
                 items(ui.discovered, key = { it.info.serverId }) { s ->
                     val mod = if (s == ui.discovered.first()) Modifier.focusRequester(firstFocus) else Modifier
                     FocusSurface(onClick = { vm.chooseServer(s) }, modifier = mod.fillMaxWidth()) {

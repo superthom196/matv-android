@@ -75,8 +75,8 @@ fun NowPlayingScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
             AsyncImage(model = np.imageUrl, contentDescription = null, contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize().alpha(0.22f))
         }
-        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color(0xDD0B0B0F), Color(0x660B0B0F), Color(0xEE0B0B0F)))))
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x000B0B0F), Color(0xCC0B0B0F)))))
+        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color(0xDD181818), Color(0x66181818), Color(0xEE181818)))))
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x00181818), Color(0xCC181818)))))
 
         Row(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 24.dp), verticalAlignment = Alignment.CenterVertically) {
             Artwork(np.imageUrl, Modifier.size(440.dp), corner = 18.dp)

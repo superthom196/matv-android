@@ -38,6 +38,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
@@ -75,7 +77,7 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
 
     Column(Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, top = 14.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("MATV", style = MaterialTheme.typography.headlineMedium, color = HiFiColors.Accent)
+            Text("MATV", style = MaterialTheme.typography.headlineLarge.copy(fontSize = 38.sp, fontWeight = FontWeight.Bold), color = HiFiColors.Accent)
             HSpace(28.dp)
             TabRow(selectedTabIndex = tab) {
                 tabs.forEachIndexed { i, (_, label) ->

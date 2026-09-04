@@ -12,13 +12,14 @@ import androidx.tv.material3.darkColorScheme
 import androidx.compose.ui.text.TextStyle
 
 object HiFiColors {
-    val Background = Color(0xFF0B0B0F)
-    val Surface = Color(0xFF15151C)
-    val SurfaceHigh = Color(0xFF1F1F29)
-    val Accent = Color(0xFFF2A93B)
-    val OnAccent = Color(0xFF1A1200)
-    val Text = Color(0xFFF4F1EA)
-    val Muted = Color(0xFF9A9AA8)
+    val Background = Color(0xFF181818)   // Music Assistant dark background
+    val Surface = Color(0xFF232323)      // Music Assistant panel
+    val SurfaceHigh = Color(0xFF2E2E2E)
+    val Accent = Color(0xFF03A9F4)       // Music Assistant primary
+    val AccentBright = Color(0xFF4FC3F7)
+    val OnAccent = Color(0xFF00202E)
+    val Text = Color(0xFFF5F5F5)
+    val Muted = Color(0xFF9E9E9E)
     val Focus = Color(0xFFFFFFFF)
     val Danger = Color(0xFFE5533D)
     val Good = Color(0xFF5BC18A)

@@ -96,7 +96,7 @@ fun FolderBrowser(vm: AppViewModel, ui: UiState, nav: Nav) {
                 val listState = rememberLazyListState()
                 LazyColumn(
                     state = listState,
-                    contentPadding = PaddingValues(bottom = 48.dp),
+                    contentPadding = PaddingValues(top = 4.dp, bottom = 48.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                     modifier = Modifier.fillMaxSize().focusRestorer(),
                 ) {

@@ -54,7 +54,7 @@ fun PlayersScreen(vm: AppViewModel, ui: UiState, onDone: () -> Unit) {
             columns = GridCells.Fixed(3),
             horizontalArrangement = Arrangement.spacedBy(18.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 40.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 4.dp, bottom = 40.dp),
         ) {
             items(players, key = { it.playerId }) { p ->
                 val focusMod = if (p == players.first()) Modifier.focusRequester(first) else Modifier

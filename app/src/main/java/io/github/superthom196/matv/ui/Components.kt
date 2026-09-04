@@ -48,6 +48,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -83,7 +84,7 @@ fun FocusSurface(
             focusedContentColor = HiFiColors.Text,
         ),
         border = ClickableSurfaceDefaults.border(
-            focusedBorder = Border(BorderStroke(3.dp, HiFiColors.Focus), shape = shape),
+            focusedBorder = Border(BorderStroke(2.dp, HiFiColors.Focus), shape = shape),
         ),
         scale = ClickableSurfaceDefaults.scale(focusedScale = scale),
     ) { content() }
@@ -104,7 +105,7 @@ fun PillButton(
         modifier = modifier,
         shape = RoundedCornerShape(50),
         container = if (primary) HiFiColors.Accent else HiFiColors.Surface,
-        focusedContainer = if (primary) Color(0xFFFFC46A) else HiFiColors.SurfaceHigh,
+        focusedContainer = if (primary) HiFiColors.AccentBright else HiFiColors.SurfaceHigh,
         scale = 1.06f,
     ) {
         Row(
@@ -134,7 +135,7 @@ fun RoundIconButton(
         modifier = modifier.size(size),
         shape = RoundedCornerShape(50),
         container = if (primary) HiFiColors.Accent else HiFiColors.SurfaceHigh,
-        focusedContainer = if (primary) Color(0xFFFFC46A) else Color(0xFF2E2E3C),
+        focusedContainer = if (primary) HiFiColors.AccentBright else Color(0xFF3A3A3A),
         scale = 1.1f,
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -146,7 +147,7 @@ fun RoundIconButton(
 /** Square artwork with a placeholder. */
 @Composable
 fun Artwork(url: String?, modifier: Modifier = Modifier, corner: androidx.compose.ui.unit.Dp = 10.dp) {
-    Box(modifier.clip(RoundedCornerShape(corner)).background(Color(0xFF23232E))) {
+    Box(modifier.clip(RoundedCornerShape(corner)).background(Color(0xFF2A2A2A))) {
         if (url != null) {
             AsyncImage(model = url, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
@@ -164,14 +165,14 @@ fun MediaCard(item: MediaItem, imageUrl: String?, onClick: () -> Unit, modifier:
         Column(Modifier.padding(7.dp)) {
             Artwork(imageUrl, Modifier.fillMaxWidth().aspectRatio(1f), corner = if (round) 200.dp else 10.dp)
             Spacer(Modifier.height(6.dp))
-            Text(item.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(item.name, style = MaterialTheme.typography.titleSmall.copy(fontSize = 12.sp, lineHeight = 15.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
             val sub = when (item.mediaType) {
                 "album" -> listOfNotNull(item.artistLine.takeIf { it.isNotBlank() }, item.year?.toString()).joinToString(" · ")
                 "playlist" -> item.owner ?: "Playlist"
                 "track" -> item.artistLine
                 else -> ""
             }
-            if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.bodySmall, color = HiFiColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 14.sp), color = HiFiColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -196,7 +197,7 @@ fun TvTextField(
     Box(
         modifier
             .background(if (focused) HiFiColors.SurfaceHigh else HiFiColors.Surface, shape)
-            .then(if (focused) Modifier.border(3.dp, HiFiColors.Focus, shape) else Modifier)
+            .then(if (focused) Modifier.border(2.dp, HiFiColors.Focus, shape) else Modifier)
             .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
         if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted)

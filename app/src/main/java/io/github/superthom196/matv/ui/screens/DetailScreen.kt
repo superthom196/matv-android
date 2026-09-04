@@ -93,13 +93,13 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
                 item.mediaType == "artist" -> LazyVerticalGrid(
                     columns = GridCells.Fixed(4),
                     horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
-                    contentPadding = PaddingValues(bottom = 48.dp), modifier = Modifier.fillMaxSize().focusRestorer(),
+                    contentPadding = PaddingValues(top = 4.dp, bottom = 48.dp), modifier = Modifier.fillMaxSize().focusRestorer(),
                 ) {
                     items(children!!, key = { "${it.provider}:${it.itemId}" }) { album ->
                         MediaCard(album, vm.imageUrl(album, 256), onClick = { nav.push(MainScreen.Detail(album)) })
                     }
                 }
-                else -> LazyColumn(contentPadding = PaddingValues(bottom = 48.dp), verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxSize().focusRestorer()) {
+                else -> LazyColumn(contentPadding = PaddingValues(top = 4.dp, bottom = 48.dp), verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxSize().focusRestorer()) {
                     itemsIndexed(children!!, key = { i, t -> "$i:${t.provider}:${t.itemId}" }) { i, track ->
                         TrackRow(i + 1, track, showArtist = item.mediaType == "playlist", onClick = { vm.playItem(item, startFrom = track) })
                     }
