@@ -1,4 +1,4 @@
-package io.github.superthom196.hifitv.ui
+package io.github.superthom196.matv.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider

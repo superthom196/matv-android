@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Build (and optionally install) HiFi TV using Android Studio's bundled JDK.
+# Build (and optionally install) MATV using Android Studio's bundled JDK.
 # Usage: ./build.sh                     -> assembleRelease (minified, debug-signed)
 #        TV=<ip:port> ./build.sh install -> assembleRelease + install, AOT-compile and launch on the TV
 set -e
@@ -14,6 +14,6 @@ if [[ "$1" == "install" ]]; then
   ADB="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb"
   "$ADB" connect "$TV"
   "$ADB" -s "$TV" install -r app/build/outputs/apk/release/app-release.apk
-  "$ADB" -s "$TV" shell cmd package compile -m speed -f io.github.superthom196.hifitv
-  "$ADB" -s "$TV" shell am start -n io.github.superthom196.hifitv/.MainActivity
+  "$ADB" -s "$TV" shell cmd package compile -m speed -f io.github.superthom196.matv
+  "$ADB" -s "$TV" shell am start -n io.github.superthom196.matv/.MainActivity
 fi

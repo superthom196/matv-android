@@ -1,22 +1,22 @@
-package io.github.superthom196.hifitv
+package io.github.superthom196.matv
 
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import io.github.superthom196.hifitv.ma.ConnectionState
-import io.github.superthom196.hifitv.ma.DiscoveredServer
-import io.github.superthom196.hifitv.ma.ImageUrls
-import io.github.superthom196.hifitv.ma.MaAuthException
-import io.github.superthom196.hifitv.ma.MaClient
-import io.github.superthom196.hifitv.ma.MaDiscovery
-import io.github.superthom196.hifitv.ma.MediaItem
-import io.github.superthom196.hifitv.ma.Player
-import io.github.superthom196.hifitv.ma.PlayerQueue
-import io.github.superthom196.hifitv.ma.Prefs
-import io.github.superthom196.hifitv.ma.SavedConfig
-import io.github.superthom196.hifitv.ma.ServerInfo
-import io.github.superthom196.hifitv.ma.maJson
+import io.github.superthom196.matv.ma.ConnectionState
+import io.github.superthom196.matv.ma.DiscoveredServer
+import io.github.superthom196.matv.ma.ImageUrls
+import io.github.superthom196.matv.ma.MaAuthException
+import io.github.superthom196.matv.ma.MaClient
+import io.github.superthom196.matv.ma.MaDiscovery
+import io.github.superthom196.matv.ma.MediaItem
+import io.github.superthom196.matv.ma.Player
+import io.github.superthom196.matv.ma.PlayerQueue
+import io.github.superthom196.matv.ma.Prefs
+import io.github.superthom196.matv.ma.SavedConfig
+import io.github.superthom196.matv.ma.ServerInfo
+import io.github.superthom196.matv.ma.maJson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -215,7 +215,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val sessionToken = withContext(Dispatchers.IO) { client.loginHttp(s.baseUrl, username, password) }
                 client.connect(s.baseUrl, sessionToken, s.info.serverId)
                 // Swap the 30-day session token for a 10-year one so the TV never silently logs out.
-                val longLived = client.createLongLivedToken("HiFi TV (${android.os.Build.MODEL})")
+                val longLived = client.createLongLivedToken("MATV (${android.os.Build.MODEL})")
                 val token = longLived ?: sessionToken
                 prefs.saveServer(s.baseUrl, token, s.info.serverId, s.info.name, username)
                 if (longLived != null) {

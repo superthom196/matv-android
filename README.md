@@ -1,7 +1,9 @@
-# HiFi TV
+# MATV
 
-Android TV controller for [Music Assistant](https://music-assistant.io). Pick a hi-fi, browse the
-library, drive playback from the sofa. Controller only: audio plays on your endpoints.
+**M**usic **A**ssistant **TV** — an Android TV controller for
+[Music Assistant](https://music-assistant.io). Sign in with your Music Assistant
+account, browse the library, drive playback from the sofa. Controller only: audio
+plays on your existing Music Assistant endpoints.
 
 ## Build
 
@@ -50,9 +52,9 @@ debug-signed with a different key, reinstalling a build from a different machine
 
 ## Layout
 
-- `app/src/main/java/io/github/superthom196/hifitv/ma` — WebSocket client, models, discovery, artwork URLs, saved settings.
-- `app/src/main/java/io/github/superthom196/hifitv/ui` — Compose for TV screens.
-- `app/src/main/java/io/github/superthom196/hifitv/AppViewModel.kt` — app state, transport commands, event handling.
+- `app/src/main/java/io/github/superthom196/matv/ma` — WebSocket client, models, discovery, artwork URLs, saved settings.
+- `app/src/main/java/io/github/superthom196/matv/ui` — Compose for TV screens.
+- `app/src/main/java/io/github/superthom196/matv/AppViewModel.kt` — app state, transport commands, event handling.
 - [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — the verified Music Assistant protocol facts this was built from.
 
 ## License

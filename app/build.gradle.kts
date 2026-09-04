@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "io.github.superthom196.hifitv"
+    namespace = "io.github.superthom196.matv"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "io.github.superthom196.hifitv"
+        applicationId = "io.github.superthom196.matv"
         minSdk = 28
         targetSdk = 36
         versionCode = 1

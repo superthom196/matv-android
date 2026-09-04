@@ -1,6 +1,6 @@
-package io.github.superthom196.hifitv
+package io.github.superthom196.matv
 
-import io.github.superthom196.hifitv.ma.MediaItem
+import io.github.superthom196.matv.ma.MediaItem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow

@@ -1,12 +1,12 @@
-package io.github.superthom196.hifitv
+package io.github.superthom196.matv
 
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import io.github.superthom196.hifitv.ui.AppRoot
-import io.github.superthom196.hifitv.ui.HiFiTheme
+import io.github.superthom196.matv.ui.AppRoot
+import io.github.superthom196.matv.ui.HiFiTheme
 
 class MainActivity : ComponentActivity() {
 

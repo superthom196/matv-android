@@ -1,4 +1,4 @@
-package io.github.superthom196.hifitv
+package io.github.superthom196.matv
 
 import android.app.Application
 import coil3.ImageLoader

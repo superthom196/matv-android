@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalTvMaterial3Api::class)
 
-package io.github.superthom196.hifitv.ui
+package io.github.superthom196.matv.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -56,7 +56,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
-import io.github.superthom196.hifitv.ma.MediaItem
+import io.github.superthom196.matv.ma.MediaItem
 
 /** A focusable, clickable panel with the app's focus treatment: white ring, slight grow. */
 @Composable

@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalTvMaterial3Api::class)
 
-package io.github.superthom196.hifitv.ui.screens
+package io.github.superthom196.matv.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,16 +40,16 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Tab
 import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
-import io.github.superthom196.hifitv.AppViewModel
-import io.github.superthom196.hifitv.UiState
-import io.github.superthom196.hifitv.ui.Artwork
-import io.github.superthom196.hifitv.ui.FocusSurface
-import io.github.superthom196.hifitv.ui.HSpace
-import io.github.superthom196.hifitv.ui.HiFiColors
-import io.github.superthom196.hifitv.ui.MainScreen
-import io.github.superthom196.hifitv.ui.MediaCard
-import io.github.superthom196.hifitv.ui.Nav
-import io.github.superthom196.hifitv.ui.VSpace
+import io.github.superthom196.matv.AppViewModel
+import io.github.superthom196.matv.UiState
+import io.github.superthom196.matv.ui.Artwork
+import io.github.superthom196.matv.ui.FocusSurface
+import io.github.superthom196.matv.ui.HSpace
+import io.github.superthom196.matv.ui.HiFiColors
+import io.github.superthom196.matv.ui.MainScreen
+import io.github.superthom196.matv.ui.MediaCard
+import io.github.superthom196.matv.ui.Nav
+import io.github.superthom196.matv.ui.VSpace
 
 private val tabs = listOf("folders" to "Folders", "artists" to "Artists", "albums" to "Albums")
 
@@ -65,7 +65,7 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
 
     Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 56.dp, top = 32.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("HiFi TV", style = MaterialTheme.typography.headlineMedium, color = HiFiColors.Accent)
+            Text("MATV", style = MaterialTheme.typography.headlineMedium, color = HiFiColors.Accent)
             HSpace(40.dp)
             TabRow(selectedTabIndex = tab) {
                 tabs.forEachIndexed { i, (_, label) ->

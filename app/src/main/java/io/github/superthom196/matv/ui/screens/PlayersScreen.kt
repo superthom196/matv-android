@@ -1,4 +1,4 @@
-package io.github.superthom196.hifitv.ui.screens
+package io.github.superthom196.matv.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,15 +20,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import io.github.superthom196.hifitv.AppViewModel
-import io.github.superthom196.hifitv.UiState
-import io.github.superthom196.hifitv.ma.Player
-import io.github.superthom196.hifitv.ui.FocusSurface
-import io.github.superthom196.hifitv.ui.HSpace
-import io.github.superthom196.hifitv.ui.HiFiColors
-import io.github.superthom196.hifitv.ui.PillButton
-import io.github.superthom196.hifitv.ui.StatusDot
-import io.github.superthom196.hifitv.ui.VSpace
+import io.github.superthom196.matv.AppViewModel
+import io.github.superthom196.matv.UiState
+import io.github.superthom196.matv.ma.Player
+import io.github.superthom196.matv.ui.FocusSurface
+import io.github.superthom196.matv.ui.HSpace
+import io.github.superthom196.matv.ui.HiFiColors
+import io.github.superthom196.matv.ui.PillButton
+import io.github.superthom196.matv.ui.StatusDot
+import io.github.superthom196.matv.ui.VSpace
 
 /** Pick which hi-fi the TV drives. Shown first when nothing is chosen, and from the "player" chip later. */
 @Composable

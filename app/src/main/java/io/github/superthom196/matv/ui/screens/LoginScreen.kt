@@ -1,4 +1,4 @@
-package io.github.superthom196.hifitv.ui.screens
+package io.github.superthom196.matv.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
@@ -22,14 +22,14 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import io.github.superthom196.hifitv.AppViewModel
-import io.github.superthom196.hifitv.UiState
-import io.github.superthom196.hifitv.ui.HSpace
-import io.github.superthom196.hifitv.ui.HiFiColors
-import io.github.superthom196.hifitv.ui.PillButton
-import io.github.superthom196.hifitv.ui.SectionLabel
-import io.github.superthom196.hifitv.ui.TvTextField
-import io.github.superthom196.hifitv.ui.VSpace
+import io.github.superthom196.matv.AppViewModel
+import io.github.superthom196.matv.UiState
+import io.github.superthom196.matv.ui.HSpace
+import io.github.superthom196.matv.ui.HiFiColors
+import io.github.superthom196.matv.ui.PillButton
+import io.github.superthom196.matv.ui.SectionLabel
+import io.github.superthom196.matv.ui.TvTextField
+import io.github.superthom196.matv.ui.VSpace
 
 @Composable
 fun LoginScreen(vm: AppViewModel, ui: UiState) {

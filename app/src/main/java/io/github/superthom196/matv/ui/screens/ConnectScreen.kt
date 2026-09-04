@@ -1,4 +1,4 @@
-package io.github.superthom196.hifitv.ui.screens
+package io.github.superthom196.matv.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,22 +27,22 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import io.github.superthom196.hifitv.AppViewModel
-import io.github.superthom196.hifitv.UiState
-import io.github.superthom196.hifitv.ui.FocusSurface
-import io.github.superthom196.hifitv.ui.HSpace
-import io.github.superthom196.hifitv.ui.HiFiColors
-import io.github.superthom196.hifitv.ui.PillButton
-import io.github.superthom196.hifitv.ui.SectionLabel
-import io.github.superthom196.hifitv.ui.StatusDot
-import io.github.superthom196.hifitv.ui.TvTextField
-import io.github.superthom196.hifitv.ui.VSpace
+import io.github.superthom196.matv.AppViewModel
+import io.github.superthom196.matv.UiState
+import io.github.superthom196.matv.ui.FocusSurface
+import io.github.superthom196.matv.ui.HSpace
+import io.github.superthom196.matv.ui.HiFiColors
+import io.github.superthom196.matv.ui.PillButton
+import io.github.superthom196.matv.ui.SectionLabel
+import io.github.superthom196.matv.ui.StatusDot
+import io.github.superthom196.matv.ui.TvTextField
+import io.github.superthom196.matv.ui.VSpace
 
 @Composable
 fun LoadingScreen(ui: UiState) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("HiFi TV", style = MaterialTheme.typography.displayMedium, color = HiFiColors.Accent)
+            Text("MATV", style = MaterialTheme.typography.displayMedium, color = HiFiColors.Accent)
             VSpace(16.dp)
             Text("Connecting to ${ui.baseUrl ?: "Music Assistant"}…", style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted)
         }
@@ -57,7 +57,7 @@ fun ConnectScreen(vm: AppViewModel, ui: UiState) {
 
     Row(Modifier.fillMaxSize().padding(horizontal = 72.dp, vertical = 56.dp)) {
         Column(Modifier.width(520.dp)) {
-            Text("HiFi TV", style = MaterialTheme.typography.displayMedium, color = HiFiColors.Accent)
+            Text("MATV", style = MaterialTheme.typography.displayMedium, color = HiFiColors.Accent)
             VSpace(8.dp)
             Text("A big-screen remote for Music Assistant.", style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted)
             VSpace(40.dp)

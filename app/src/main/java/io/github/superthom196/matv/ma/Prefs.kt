@@ -1,4 +1,4 @@
-package io.github.superthom196.hifitv.ma
+package io.github.superthom196.matv.ma
 
 import android.content.Context
 import androidx.datastore.core.DataStore

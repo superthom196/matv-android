@@ -1,4 +1,4 @@
-package io.github.superthom196.hifitv.ui.screens
+package io.github.superthom196.matv.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -50,17 +50,17 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
-import io.github.superthom196.hifitv.AppViewModel
-import io.github.superthom196.hifitv.UiState
-import io.github.superthom196.hifitv.ui.Artwork
-import io.github.superthom196.hifitv.ui.HSpace
-import io.github.superthom196.hifitv.ui.HiFiColors
-import io.github.superthom196.hifitv.ui.MainScreen
-import io.github.superthom196.hifitv.ui.Nav
-import io.github.superthom196.hifitv.ui.PillButton
-import io.github.superthom196.hifitv.ui.RoundIconButton
-import io.github.superthom196.hifitv.ui.VSpace
-import io.github.superthom196.hifitv.ui.formatTime
+import io.github.superthom196.matv.AppViewModel
+import io.github.superthom196.matv.UiState
+import io.github.superthom196.matv.ui.Artwork
+import io.github.superthom196.matv.ui.HSpace
+import io.github.superthom196.matv.ui.HiFiColors
+import io.github.superthom196.matv.ui.MainScreen
+import io.github.superthom196.matv.ui.Nav
+import io.github.superthom196.matv.ui.PillButton
+import io.github.superthom196.matv.ui.RoundIconButton
+import io.github.superthom196.matv.ui.VSpace
+import io.github.superthom196.matv.ui.formatTime
 
 /** The screen that makes the hi-fi feel like part of the room. */
 @Composable

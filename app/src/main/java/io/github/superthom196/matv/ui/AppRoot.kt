@@ -1,4 +1,4 @@
-package io.github.superthom196.hifitv.ui
+package io.github.superthom196.matv.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -20,17 +20,17 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import io.github.superthom196.hifitv.AppViewModel
-import io.github.superthom196.hifitv.Phase
-import io.github.superthom196.hifitv.ma.ConnectionState
-import io.github.superthom196.hifitv.ma.MediaItem
-import io.github.superthom196.hifitv.ui.screens.ConnectScreen
-import io.github.superthom196.hifitv.ui.screens.DetailScreen
-import io.github.superthom196.hifitv.ui.screens.LibraryScreen
-import io.github.superthom196.hifitv.ui.screens.LoadingScreen
-import io.github.superthom196.hifitv.ui.screens.LoginScreen
-import io.github.superthom196.hifitv.ui.screens.NowPlayingScreen
-import io.github.superthom196.hifitv.ui.screens.PlayersScreen
+import io.github.superthom196.matv.AppViewModel
+import io.github.superthom196.matv.Phase
+import io.github.superthom196.matv.ma.ConnectionState
+import io.github.superthom196.matv.ma.MediaItem
+import io.github.superthom196.matv.ui.screens.ConnectScreen
+import io.github.superthom196.matv.ui.screens.DetailScreen
+import io.github.superthom196.matv.ui.screens.LibraryScreen
+import io.github.superthom196.matv.ui.screens.LoadingScreen
+import io.github.superthom196.matv.ui.screens.LoginScreen
+import io.github.superthom196.matv.ui.screens.NowPlayingScreen
+import io.github.superthom196.matv.ui.screens.PlayersScreen
 
 /** Screens inside the connected app. A plain in-memory back stack; Back pops, exits at the root. */
 sealed class MainScreen {

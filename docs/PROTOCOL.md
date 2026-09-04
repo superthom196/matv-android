@@ -2,7 +2,7 @@
 
 Facts verified against a live Music Assistant 2.10.1 server (schema 65, min supported
 schema 28) and the official Python client. Useful background if you're touching
-`app/src/main/java/io/github/superthom196/hifitv/ma/`.
+`app/src/main/java/io/github/superthom196/matv/ma/`.
 
 - WebSocket `ws://host:8095/ws`. Server sends `ServerInfoMessage` first. First command
   must be `auth` with `{token}` or `{username, password, device_name}`; result

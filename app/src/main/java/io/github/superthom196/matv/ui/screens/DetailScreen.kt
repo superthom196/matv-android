@@ -1,4 +1,4 @@
-package io.github.superthom196.hifitv.ui.screens
+package io.github.superthom196.matv.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,19 +34,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import io.github.superthom196.hifitv.AppViewModel
-import io.github.superthom196.hifitv.UiState
-import io.github.superthom196.hifitv.ma.MediaItem
-import io.github.superthom196.hifitv.ui.Artwork
-import io.github.superthom196.hifitv.ui.FocusSurface
-import io.github.superthom196.hifitv.ui.HSpace
-import io.github.superthom196.hifitv.ui.HiFiColors
-import io.github.superthom196.hifitv.ui.MainScreen
-import io.github.superthom196.hifitv.ui.MediaCard
-import io.github.superthom196.hifitv.ui.Nav
-import io.github.superthom196.hifitv.ui.PillButton
-import io.github.superthom196.hifitv.ui.VSpace
-import io.github.superthom196.hifitv.ui.formatTime
+import io.github.superthom196.matv.AppViewModel
+import io.github.superthom196.matv.UiState
+import io.github.superthom196.matv.ma.MediaItem
+import io.github.superthom196.matv.ui.Artwork
+import io.github.superthom196.matv.ui.FocusSurface
+import io.github.superthom196.matv.ui.HSpace
+import io.github.superthom196.matv.ui.HiFiColors
+import io.github.superthom196.matv.ui.MainScreen
+import io.github.superthom196.matv.ui.MediaCard
+import io.github.superthom196.matv.ui.Nav
+import io.github.superthom196.matv.ui.PillButton
+import io.github.superthom196.matv.ui.VSpace
+import io.github.superthom196.matv.ui.formatTime
 
 /** Album / playlist → tracks; artist → albums. Play the whole thing, or a track "from here". */
 @Composable
