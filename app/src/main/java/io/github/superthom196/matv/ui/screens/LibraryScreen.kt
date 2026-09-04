@@ -2,6 +2,10 @@
 
 package io.github.superthom196.matv.ui.screens
 
+import io.github.superthom196.matv.ui.PlayOptionsMenu
+import io.github.superthom196.matv.ma.MediaItem
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,6 +66,7 @@ import io.github.superthom196.matv.ui.FocusSurface
 import io.github.superthom196.matv.ui.HSpace
 import io.github.superthom196.matv.ui.HiFiColors
 import io.github.superthom196.matv.ui.AlphabetRail
+import io.github.superthom196.matv.ui.DpadTracker
 import io.github.superthom196.matv.ui.MainScreen
 import io.github.superthom196.matv.ui.MediaCard
 import io.github.superthom196.matv.ui.Nav
@@ -69,17 +74,28 @@ import io.github.superthom196.matv.ui.VSpace
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
-private val tabs = listOf("artists" to "Artists", "albums" to "Albums", "folders" to "Folders")
+private val baseTabs = listOf("artists" to "Artists", "albums" to "Albums", "folders" to "Folders", "favourites" to "Favourites")
 
 @Composable
 fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
-    var tab by rememberSaveable { mutableIntStateOf(0) } // opens on Artists
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val tabs = remember(settings) {
+        baseTabs + listOfNotNull(
+            if (settings.showPlaylists) "playlists" to "Playlists" else null,
+            if (settings.showRadio) "radio" to "Radio" else null,
+        )
+    }
+    var tab by rememberSaveable { mutableIntStateOf(tabs.indexOfFirst { it.first == settings.defaultTab }.coerceAtLeast(0)) }
+    if (tab >= tabs.size) tab = 0
     val kind = tabs[tab].first
     // Note: the composed `page` can lag one frame behind a tab switch, so ask the store directly.
     LaunchedEffect(kind, ui.connection) {
         when (kind) {
             "albums" -> vm.albums.ensureLoaded()
             "artists" -> vm.artists.ensureLoaded()
+            "playlists" -> vm.playlists.ensureLoaded()
+            "radio" -> vm.radios.ensureLoaded()
+            "favourites" -> vm.ensureFavouritesLoaded()
             else -> Unit // FolderBrowser loads itself via music/browse
         }
     }
@@ -88,29 +104,51 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
 
     Column(Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, top = 14.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("MATV", style = MaterialTheme.typography.headlineLarge.copy(fontSize = 38.sp, fontWeight = FontWeight.Bold), color = HiFiColors.Accent)
-            HSpace(28.dp)
+            Text("MATV", style = MaterialTheme.typography.headlineLarge.copy(fontSize = 34.sp, fontWeight = FontWeight.Bold), color = HiFiColors.Accent)
+            HSpace(18.dp)
             TabRow(selectedTabIndex = tab) {
                 tabs.forEachIndexed { i, (_, label) ->
-                    Tab(selected = i == tab, onFocus = { tab = i }, onClick = { tab = i },
+                    Tab(selected = i == tab, onFocus = { if (DpadTracker.userNavigatedRecently()) tab = i }, onClick = { tab = i },
                         modifier = if (i == tab) Modifier.focusRequester(tabFocus) else Modifier) {
-                        Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
+                        Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp))
                     }
                 }
             }
             Box(Modifier.weight(1f))
+            IconChip(Icons.Default.Search, "Search", onClick = { nav.push(MainScreen.Search) })
+            HSpace(6.dp)
             NowPlayingChip(ui, onClick = { nav.push(MainScreen.NowPlaying) })
-            HSpace(14.dp)
+            HSpace(6.dp)
             PlayerChip(ui, onClick = { nav.push(MainScreen.Players) })
+            HSpace(6.dp)
+            IconChip(Icons.Default.Settings, "Settings", onClick = { nav.push(MainScreen.Settings) })
         }
         VSpace(10.dp)
         if (kind == "folders") {
             FolderBrowser(vm, ui, nav)
             return@Column
         }
-        if (kind == "albums") IndexedGrid(vm, nav, vm.albums, columns = 6, round = false, loadingText = "Sorting your albums by artist…")
-        else IndexedGrid(vm, nav, vm.artists, columns = 7, round = true, loadingText = "Sorting your artists…")
+        when (kind) {
+            "albums" -> IndexedGrid(vm, nav, vm.albums, columns = 6, round = false, loadingText = "Sorting your albums by artist…")
+            "playlists" -> IndexedGrid(vm, nav, vm.playlists, columns = 6, round = false, loadingText = "Loading playlists…")
+            "radio" -> IndexedGrid(vm, nav, vm.radios, columns = 6, round = false, loadingText = "Loading radio stations…")
+            "favourites" -> FavouritesTab(vm, nav)
+            else -> IndexedGrid(vm, nav, vm.artists, columns = 7, round = true, loadingText = "Sorting your artists…")
+        }
     }
+}
+
+/** Small round header button with just an icon. */
+@Composable
+fun IconChip(icon: androidx.compose.ui.graphics.vector.ImageVector, contentDescription: String, onClick: () -> Unit) {
+    FocusSurface(onClick = onClick, shape = androidx.compose.foundation.shape.RoundedCornerShape(50)) {
+        Box(Modifier.padding(10.dp)) { Icon(icon, contentDescription, tint = HiFiColors.Text, modifier = Modifier.size(22.dp)) }
+    }
+}
+
+/** OK on a browsable item opens it; anything else (radio, track) plays. */
+fun openOrPlay(vm: AppViewModel, nav: Nav, item: MediaItem) {
+    if (item.mediaType in setOf("album", "artist", "playlist")) nav.push(MainScreen.Detail(item)) else vm.playItem(item)
 }
 
 /** A request to scroll to and focus a grid index; `token` makes repeat jumps to the same index re-fire. */
@@ -139,6 +177,8 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
     }
 
     val gridState = rememberLazyGridState()
+    var menuFor by remember { mutableStateOf<MediaItem?>(null) }
+    menuFor?.let { PlayOptionsMenu(vm, it, onDismiss = { menuFor = null }) }
     var jump by remember { mutableStateOf<JumpRequest?>(null) }
     val itemFocus = remember { FocusRequester() }
     val focusIndex = jump?.index ?: 0
@@ -194,7 +234,7 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
                     .then(if (index == focusIndex) Modifier.focusRequester(itemFocus) else Modifier)
                 val own = vm.imageUrl(item, 256)
                 val url = if (own == null && round) vm.artistCover(item, 256).collectAsStateWithLifecycle().value else own
-                MediaCard(item, url, onClick = { nav.push(MainScreen.Detail(item)) }, modifier = mod, round = round)
+                MediaCard(item, url, onClick = { openOrPlay(vm, nav, item) }, modifier = mod, round = round, onLongClick = { menuFor = item })
             }
         }
     }
@@ -212,7 +252,7 @@ fun NowPlayingChip(ui: UiState, onClick: () -> Unit) {
             Text(
                 if (np.hasMedia) np.title else "Now playing",
                 style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 280.dp),
+                modifier = Modifier.widthIn(max = 140.dp),
             )
         }
     }
@@ -221,11 +261,11 @@ fun NowPlayingChip(ui: UiState, onClick: () -> Unit) {
 @Composable
 fun PlayerChip(ui: UiState, onClick: () -> Unit) {
     FocusSurface(onClick = onClick, shape = androidx.compose.foundation.shape.RoundedCornerShape(50)) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Speaker, null, tint = HiFiColors.Accent, modifier = Modifier.size(24.dp))
             HSpace(10.dp)
             Text(ui.selectedPlayer?.name ?: "Choose player", style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 260.dp))
+                modifier = Modifier.widthIn(max = 110.dp))
         }
     }
 }

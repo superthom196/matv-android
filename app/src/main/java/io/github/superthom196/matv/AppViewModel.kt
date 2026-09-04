@@ -14,6 +14,7 @@ import io.github.superthom196.matv.ma.MediaItem
 import io.github.superthom196.matv.ma.Player
 import io.github.superthom196.matv.ma.PlayerQueue
 import io.github.superthom196.matv.ma.QueueItem
+import io.github.superthom196.matv.ma.AppSettings
 import io.github.superthom196.matv.ma.Prefs
 import io.github.superthom196.matv.ma.SavedConfig
 import io.github.superthom196.matv.ma.ServerInfo
@@ -24,6 +25,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -98,6 +101,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val discovery = MaDiscovery(app, client)
     val albums = AlbumIndex(viewModelScope, count = { client.albumsCount() }, fetch = { off, lim -> client.libraryItems("albums", off, lim) })
     val artists = AlbumIndex(viewModelScope, count = { client.artistsCount() }, fetch = { off, lim -> client.libraryItems("artists", off, lim) }, sortKey = ::artistNameKey)
+    val playlists = AlbumIndex(viewModelScope, count = { client.libraryCount("playlists") }, fetch = { off, lim -> client.libraryItems("playlists", off, lim) }, sortKey = ::artistNameKey)
+    val radios = AlbumIndex(viewModelScope, count = { client.libraryCount("radios") }, fetch = { off, lim -> client.libraryItems("radios", off, lim) }, sortKey = ::artistNameKey)
+
+    val settings: StateFlow<AppSettings> = prefs.settings.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
+    fun updateSettings(transform: (AppSettings) -> AppSettings) { viewModelScope.launch { prefs.saveSettings(transform(settings.value)) } }
+
+    /** Favourite flags changed in this session, keyed "provider:item_id"; the server's own flag is the fallback. */
+    private val _favOverrides = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val favOverrides: StateFlow<Map<String, Boolean>> = _favOverrides.asStateFlow()
+    fun isFavourite(item: MediaItem): Boolean = _favOverrides.value["${item.provider}:${item.itemId}"] ?: item.favorite
+
+    data class Favourites(val artists: List<MediaItem> = emptyList(), val albums: List<MediaItem> = emptyList(), val tracks: List<MediaItem> = emptyList(), val playlists: List<MediaItem> = emptyList(), val loading: Boolean = false, val loaded: Boolean = false, val error: String? = null)
+    private val _favourites = MutableStateFlow(Favourites())
+    val favourites: StateFlow<Favourites> = _favourites.asStateFlow()
+
+    data class SearchState(val query: String = "", val results: Map<String, List<MediaItem>> = emptyMap(), val searching: Boolean = false, val error: String? = null)
+    private val _search = MutableStateFlow(SearchState())
+    val search: StateFlow<SearchState> = _search.asStateFlow()
+    private var searchJob: Job? = null
 
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
@@ -109,6 +131,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     @Volatile private var queueVisible = false
 
     private val _folders = MutableStateFlow<List<FolderLevel>>(emptyList())
+    private val _folderBusy = MutableStateFlow(false)
+    /** True while a folder level is being fetched (the list keeps showing the current level meanwhile). */
+    val folderBusy: StateFlow<Boolean> = _folderBusy.asStateFlow()
     /** Folder browser stack; empty until the Folders tab is first opened. */
     val folders: StateFlow<List<FolderLevel>> = _folders.asStateFlow()
     private var nextFolderId = 1L
@@ -142,9 +167,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             client.connect(cfg.baseUrl!!, cfg.token!!, cfg.serverId)
             afterConnected(cfg)
         } catch (e: MaAuthException) {
-            // Token rejected or a different server answered: go back through login, keep the address.
-            _ui.update { it.copy(phase = Phase.Connect, connectError = e.message) }
-            startDiscovery()
+            // Token rejected (revoked on the server, expired) or a different server answered: go
+            // straight to the login screen for the saved server instead of making the user rediscover it.
+            val info = runCatching { withContext(Dispatchers.IO) { client.fetchInfo(cfg.baseUrl!!) } }.getOrNull()
+            if (info != null) {
+                _ui.update { it.copy(phase = Phase.Login, pendingServer = DiscoveredServer(cfg.baseUrl!!, info, "saved"), loginError = "Your saved login is no longer valid. Sign in again.") }
+            } else {
+                _ui.update { it.copy(phase = Phase.Connect, connectError = e.message) }
+                startDiscovery()
+            }
         } catch (e: Exception) {
             // Server unreachable right now: keep trying quietly, show the Connect screen with a hint.
             _ui.update { it.copy(phase = Phase.Connect, connectError = "Cannot reach ${cfg.serverName ?: cfg.baseUrl}: ${e.message}") }
@@ -248,6 +279,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             queues.clear()
             albums.reset()
             artists.reset()
+            playlists.reset()
+            radios.reset()
+            _favourites.value = Favourites()
+            _favOverrides.value = emptyMap()
             _folders.value = emptyList()
             AuthHolder.token = null
             _ui.value = UiState(phase = Phase.Connect)
@@ -261,6 +296,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         AuthHolder.token = cfg.token
         albums.reset()
         artists.reset()
+        playlists.reset()
+        radios.reset()
+        _favourites.value = Favourites()
+        _favOverrides.value = emptyMap()
         _folders.value = emptyList()
         _ui.update {
             it.copy(
@@ -488,6 +527,67 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun moveQueueItem(item: QueueItem, shift: Int) { val qid = _ui.value.activeQueueId ?: return; cmd { client.moveQueueItem(qid, item.queueItemId, shift); refreshQueue() } }
+    fun removeQueueItem(item: QueueItem) { val qid = _ui.value.activeQueueId ?: return; cmd { client.deleteQueueItem(qid, item.queueItemId); refreshQueue() } }
+    fun clearQueue() { val qid = _ui.value.activeQueueId ?: return; cmd { client.clearQueue(qid); refreshQueue(); flash("Queue cleared") } }
+
+    fun toggleFavourite(item: MediaItem) {
+        val key = "${item.provider}:${item.itemId}"
+        val now = !isFavourite(item)
+        _favOverrides.update { it + (key to now) }
+        cmd {
+            if (now) client.addFavorite(item) else client.removeFavorite(item)
+            flash(if (now) "Added ${item.name} to favourites" else "Removed ${item.name} from favourites")
+            _favourites.update { it.copy(loaded = false) }
+        }
+    }
+
+    fun ensureFavouritesLoaded(force: Boolean = false) {
+        val cur = _favourites.value
+        if (!force && (cur.loading || cur.loaded)) return
+        _favourites.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            try {
+                val a = client.libraryItems("artists", 0, 200, favoriteOnly = true)
+                val al = client.libraryItems("albums", 0, 500, favoriteOnly = true)
+                val t = client.libraryItems("tracks", 0, 500, favoriteOnly = true)
+                val p = runCatching { client.libraryItems("playlists", 0, 200, favoriteOnly = true) }.getOrDefault(emptyList())
+                _favourites.value = Favourites(a, al, t, p, loading = false, loaded = true)
+            } catch (e: Exception) {
+                _favourites.update { it.copy(loading = false, error = e.message ?: "Failed to load favourites") }
+            }
+        }
+    }
+
+    fun setSearchQuery(q: String) {
+        _search.update { it.copy(query = q) }
+        searchJob?.cancel()
+        if (q.isBlank()) { _search.update { it.copy(results = emptyMap(), searching = false, error = null) }; return }
+        searchJob = viewModelScope.launch {
+            delay(450)
+            _search.update { it.copy(searching = true, error = null) }
+            try {
+                val res = client.search(q)
+                _search.update { if (it.query == q) it.copy(results = res, searching = false) else it }
+            } catch (e: Exception) {
+                _search.update { it.copy(searching = false, error = e.message ?: "Search failed") }
+            }
+        }
+    }
+
+    fun groupPlayer(playerId: String, targetId: String) = cmd { client.groupPlayer(playerId, targetId); flash("Synced") }
+    fun ungroupPlayer(playerId: String) = cmd { client.ungroupPlayer(playerId); flash("Unsynced") }
+
+    /** User-initiated reconnect from the connection overlay. */
+    fun reconnectNow() {
+        viewModelScope.launch {
+            val cfg = prefs.current()
+            if (!cfg.hasServer) return@launch
+            _ui.update { it.copy(connection = ConnectionState.Connecting) }
+            try { client.connect(cfg.baseUrl!!, cfg.token!!, cfg.serverId); afterConnected(cfg) } catch (e: Exception) { flash(e.message ?: "Still unreachable") }
+        }
+    }
+
     fun playQueueIndex(index: Int) {
         val qid = _ui.value.activeQueueId ?: return
         cmd { client.playIndex(qid, index) }
@@ -505,16 +605,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // The root list never grabs focus on its own (that hijacks walking along the tab row); only
         // levels the user opens do.
         if (folder == null) folderLevelAutoFocused = level.id
-        _folders.update { if (folder == null) listOf(level) else it + level }
+        // The root shows a loading placeholder; deeper levels are loaded first and swapped in whole,
+        // so the focused row is never yanked from under the D-pad mid-load.
+        if (folder == null) _folders.value = listOf(level)
+        _folderBusy.value = true
         viewModelScope.launch {
             try {
                 val items = client.browse(folder?.path)
                 val sorted = items.sortedWith(compareBy({ it.name != ".." }, { !it.isFolder }, { (it.sortName ?: it.name).lowercase() }))
-                _folders.update { st -> st.map { if (it.id == level.id) it.copy(items = sorted, loading = false) else it } }
+                val loaded = level.copy(items = sorted, loading = false)
+                _folders.update { st -> if (folder == null) listOf(loaded) else st + loaded }
                 // A single provider at the root is the common case: skip straight into it.
                 if (folder == null && sorted.size == 1 && sorted[0].isFolder) openFolder(sorted[0])
             } catch (e: Exception) {
-                _folders.update { st -> st.map { if (it.id == level.id) it.copy(loading = false, error = e.message ?: "Failed to load") else it } }
+                val failed = level.copy(loading = false, error = e.message ?: "Failed to load")
+                _folders.update { st -> if (folder == null) listOf(failed) else st + failed }
+            } finally {
+                _folderBusy.value = false
             }
         }
     }

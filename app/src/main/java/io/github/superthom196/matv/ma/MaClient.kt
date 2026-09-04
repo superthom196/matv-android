@@ -341,13 +341,43 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
         return withContext(Dispatchers.Default) { runCatching { maJson.decodeFromJsonElement(PlayerQueue.serializer(), el) }.getOrNull() }
     }
 
-    suspend fun libraryItems(kind: String, offset: Int, limit: Int, orderBy: String = "sort_name"): List<MediaItem> {
+    suspend fun libraryItems(kind: String, offset: Int, limit: Int, orderBy: String = "sort_name", favoriteOnly: Boolean = false): List<MediaItem> {
         val extra: Array<Pair<String, Any?>> = if (kind == "artists") arrayOf("album_artists_only" to true) else emptyArray()
-        val el = send("music/$kind/library_items", "limit" to limit, "offset" to offset, "order_by" to orderBy, *extra)
+        val el = send("music/$kind/library_items", "limit" to limit, "offset" to offset, "order_by" to orderBy, "favorite" to (if (favoriteOnly) true else null), *extra)
         return decodeList(el, MediaItem.serializer(), "media item")
     }
 
     /** Total album count, used only for a loading progress readout; null if the command fails or is absent. */
+    /** Count for a library kind ("playlists", "radios", ...) used only for a loading readout. */
+    suspend fun libraryCount(kind: String): Int? = runCatching {
+        val el = send("music/$kind/count")
+        (el as? JsonPrimitive)?.intOrNull ?: (el as? JsonObject)?.get("count")?.jsonPrimitive?.intOrNull
+    }.getOrNull()
+
+    /** Library-wide search; each section decoded leniently (results may be ItemMappings). */
+    suspend fun search(query: String, limit: Int = 12): Map<String, List<MediaItem>> {
+        val el = send("music/search", "search_query" to query, "limit" to limit, "library_only" to true,
+            "media_types" to listOf("artist", "album", "track", "playlist", "radio"))
+        val obj = el as? JsonObject ?: return emptyMap()
+        return withContext(Dispatchers.Default) {
+            listOf("artists", "albums", "tracks", "playlists", "radio").associateWith { key ->
+                (obj[key] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { item ->
+                    runCatching { maJson.decodeFromJsonElement(MediaItem.serializer(), item) }.getOrNull()
+                } ?: emptyList()
+            }
+        }
+    }
+
+    suspend fun addFavorite(item: MediaItem) { send("music/favorites/add_item", "item" to (item.uri ?: return)) }
+    suspend fun removeFavorite(item: MediaItem) { send("music/favorites/remove_item", "media_type" to item.mediaType, "library_item_id" to item.itemId) }
+
+    suspend fun moveQueueItem(queueId: String, queueItemId: String, shift: Int) { send("player_queues/move_item", "queue_id" to queueId, "queue_item_id" to queueItemId, "pos_shift" to shift) }
+    suspend fun deleteQueueItem(queueId: String, queueItemId: String) { send("player_queues/delete_item", "queue_id" to queueId, "item_id_or_index" to queueItemId) }
+    suspend fun clearQueue(queueId: String) { send("player_queues/clear", "queue_id" to queueId) }
+
+    suspend fun groupPlayer(playerId: String, targetPlayer: String) { send("players/cmd/group", "player_id" to playerId, "target_player" to targetPlayer) }
+    suspend fun ungroupPlayer(playerId: String) { send("players/cmd/ungroup", "player_id" to playerId) }
+
     suspend fun artistsCount(): Int? = runCatching {
         val el = send("music/artists/count", "album_artists_only" to true)
         (el as? JsonPrimitive)?.intOrNull ?: (el as? JsonObject)?.get("count")?.jsonPrimitive?.intOrNull

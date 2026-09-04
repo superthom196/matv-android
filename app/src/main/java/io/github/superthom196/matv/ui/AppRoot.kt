@@ -13,7 +13,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.focusRequester
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -32,6 +37,8 @@ import io.github.superthom196.matv.ui.screens.LoginScreen
 import io.github.superthom196.matv.ui.screens.NowPlayingScreen
 import io.github.superthom196.matv.ui.screens.PlayersScreen
 import io.github.superthom196.matv.ui.screens.QueueScreen
+import io.github.superthom196.matv.ui.screens.SearchScreen
+import io.github.superthom196.matv.ui.screens.SettingsScreen
 
 /** Screens inside the connected app. A plain in-memory back stack; Back pops, exits at the root. */
 sealed class MainScreen {
@@ -39,6 +46,8 @@ sealed class MainScreen {
     data object Players : MainScreen()
     data object NowPlaying : MainScreen()
     data object Queue : MainScreen()
+    data object Search : MainScreen()
+    data object Settings : MainScreen()
     data class Detail(val item: MediaItem) : MainScreen()
 }
 
@@ -75,6 +84,12 @@ fun AppRoot(vm: AppViewModel) {
                     .padding(horizontal = 18.dp, vertical = 8.dp),
             ) { Text(text, style = MaterialTheme.typography.labelMedium, color = HiFiColors.Text) }
         }
+        // After a few seconds of not being connected, take over the screen with a proper explanation.
+        if (ui.phase == Phase.Main && conn !is ConnectionState.Connected) {
+            var stale by remember { mutableStateOf(conn is ConnectionState.Failed) }
+            LaunchedEffect(conn) { if (conn !is ConnectionState.Failed) { stale = false; delay(5000) }; stale = true }
+            if (stale) ConnectionOverlay(vm, ui)
+        }
         // Transient message (command feedback, errors).
         AnimatedVisibility(visible = ui.message != null, modifier = Modifier.align(Alignment.BottomCenter), enter = fadeIn(), exit = fadeOut()) {
             Box(
@@ -98,6 +113,37 @@ private fun MainFlow(vm: AppViewModel) {
         })
         MainScreen.NowPlaying -> NowPlayingScreen(vm, ui, nav)
         MainScreen.Queue -> QueueScreen(vm, ui, nav)
+        MainScreen.Search -> SearchScreen(vm, ui, nav)
+        MainScreen.Settings -> SettingsScreen(vm, ui, nav)
         is MainScreen.Detail -> DetailScreen(vm, ui, nav, s.item)
+    }
+}
+
+
+@Composable
+private fun ConnectionOverlay(vm: AppViewModel, ui: io.github.superthom196.matv.UiState) {
+    val retry = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { retry.requestFocus() } }
+    val conn = ui.connection
+    Box(Modifier.fillMaxSize().background(HiFiColors.Background.copy(alpha = 0.94f)), contentAlignment = Alignment.Center) {
+        androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Lost contact with ${ui.server?.name ?: "Music Assistant"}", style = MaterialTheme.typography.headlineMedium)
+            VSpace(8.dp)
+            Text(
+                when (conn) {
+                    is ConnectionState.Reconnecting -> "Trying to reconnect (attempt ${conn.attempt}). ${conn.reason}"
+                    is ConnectionState.Failed -> conn.reason
+                    else -> "Not connected."
+                },
+                style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted,
+            )
+            Text(ui.baseUrl ?: "", style = MaterialTheme.typography.bodySmall, color = HiFiColors.Muted)
+            VSpace(24.dp)
+            Row {
+                PillButton("Retry now", onClick = { vm.reconnectNow() }, primary = true, modifier = Modifier.focusRequester(retry))
+                HSpace(12.dp)
+                PillButton("Change server", onClick = { vm.forgetServer() })
+            }
+        }
     }
 }

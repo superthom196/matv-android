@@ -11,12 +11,19 @@ import io.github.superthom196.matv.ui.HiFiTheme
 class MainActivity : ComponentActivity() {
 
     private val vm: AppViewModel by viewModels()
+    private var playbackSession: PlaybackSession? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             HiFiTheme { AppRoot(vm) }
         }
+        playbackSession = PlaybackSession(this, vm, this)
+    }
+
+    override fun onDestroy() {
+        playbackSession?.release(); playbackSession = null
+        super.onDestroy()
     }
 
     /**
@@ -24,6 +31,7 @@ class MainActivity : ComponentActivity() {
      * sees the event. D-pad and Back are left alone so on-screen focus keeps working.
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && event.keyCode in dpadKeys) io.github.superthom196.matv.ui.DpadTracker.stamp()
         if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_HEADSETHOOK -> { vm.playPause(); return true }
@@ -40,6 +48,9 @@ class MainActivity : ComponentActivity() {
         if (event.action == KeyEvent.ACTION_UP && event.keyCode in mediaKeys) return true
         return super.dispatchKeyEvent(event)
     }
+
+    // Directional keys only: OK opens folders and the resulting list swap must not count as tab navigation.
+    private val dpadKeys = setOf(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT)
 
     private val mediaKeys = setOf(
         KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_HEADSETHOOK, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE,

@@ -1,5 +1,10 @@
 package io.github.superthom196.matv.ui.screens
 
+import io.github.superthom196.matv.ui.MenuAction
+import io.github.superthom196.matv.ui.ActionMenu
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,6 +40,16 @@ import io.github.superthom196.matv.ui.VSpace
 fun PlayersScreen(vm: AppViewModel, ui: UiState, onDone: () -> Unit) {
     val players = ui.selectablePlayers
     val first = remember { FocusRequester() }
+    var menuFor by remember { mutableStateOf<Player?>(null) }
+    menuFor?.let { p ->
+        val selected = ui.selectedPlayer
+        val synced = p.syncedTo != null || !p.groupMembers.isNullOrEmpty()
+        ActionMenu(p.name, p.provider.replace('_', ' '), buildList {
+            add(MenuAction("Use this player") { vm.selectPlayer(p.playerId); onDone() })
+            if (selected != null && selected.playerId != p.playerId) add(MenuAction("Sync with ${selected.name}") { vm.groupPlayer(p.playerId, selected.playerId) })
+            if (synced) add(MenuAction("Unsync", danger = true) { vm.ungroupPlayer(p.playerId) })
+        }, onDismiss = { menuFor = null })
+    }
     LaunchedEffect(players.size) { if (players.isNotEmpty()) runCatching { first.requestFocus() } }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 24.dp)) {
@@ -58,7 +73,7 @@ fun PlayersScreen(vm: AppViewModel, ui: UiState, onDone: () -> Unit) {
         ) {
             items(players, key = { it.playerId }) { p ->
                 val focusMod = if (p == players.first()) Modifier.focusRequester(first) else Modifier
-                PlayerCard(p, selected = p.playerId == ui.selectedPlayerId, modifier = focusMod.fillMaxWidth()) {
+                PlayerCard(p, selected = p.playerId == ui.selectedPlayerId, modifier = focusMod.fillMaxWidth(), onLongClick = { menuFor = p }) {
                     vm.selectPlayer(p.playerId); onDone()
                 }
             }
@@ -67,8 +82,8 @@ fun PlayersScreen(vm: AppViewModel, ui: UiState, onDone: () -> Unit) {
 }
 
 @Composable
-private fun PlayerCard(p: Player, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    FocusSurface(onClick = onClick, modifier = modifier, container = if (selected) HiFiColors.SurfaceHigh else HiFiColors.Surface) {
+private fun PlayerCard(p: Player, selected: Boolean, modifier: Modifier = Modifier, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+    FocusSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier, container = if (selected) HiFiColors.SurfaceHigh else HiFiColors.Surface) {
         Column(Modifier.padding(22.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 StatusDot(
@@ -93,6 +108,8 @@ private fun PlayerCard(p: Player, selected: Boolean, modifier: Modifier = Modifi
                 listOfNotNull(p.provider.replace('_', ' '), p.deviceInfo?.model, p.volumeLevel?.let { "vol $it" }).joinToString("  ·  "),
                 style = MaterialTheme.typography.bodySmall, color = HiFiColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
+            p.syncedTo?.let { VSpace(4.dp); Text("Synced to another player", style = MaterialTheme.typography.labelSmall, color = HiFiColors.Muted) }
+            if (!p.groupMembers.isNullOrEmpty()) { VSpace(4.dp); Text("Group of ${p.groupMembers.size}", style = MaterialTheme.typography.labelSmall, color = HiFiColors.Muted) }
             if (selected) { VSpace(6.dp); Text("Selected", style = MaterialTheme.typography.labelSmall, color = HiFiColors.Accent) }
         }
     }

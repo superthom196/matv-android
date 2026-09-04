@@ -160,8 +160,8 @@ fun Artwork(url: String?, modifier: Modifier = Modifier, corner: androidx.compos
 
 /** Library grid tile: artwork, name, subtitle. */
 @Composable
-fun MediaCard(item: MediaItem, imageUrl: String?, onClick: () -> Unit, modifier: Modifier = Modifier, round: Boolean = false) {
-    FocusSurface(onClick = onClick, modifier = modifier, container = Color.Transparent, focusedContainer = HiFiColors.SurfaceHigh, scale = 1.05f) {
+fun MediaCard(item: MediaItem, imageUrl: String?, onClick: () -> Unit, modifier: Modifier = Modifier, round: Boolean = false, onLongClick: (() -> Unit)? = null) {
+    FocusSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier, container = Color.Transparent, focusedContainer = HiFiColors.SurfaceHigh, scale = 1.05f) {
         Column(Modifier.padding(7.dp)) {
             Artwork(imageUrl, Modifier.fillMaxWidth().aspectRatio(1f), corner = if (round) 200.dp else 10.dp)
             Spacer(Modifier.height(6.dp))

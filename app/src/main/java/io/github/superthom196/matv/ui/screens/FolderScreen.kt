@@ -1,5 +1,8 @@
 package io.github.superthom196.matv.ui.screens
 
+import io.github.superthom196.matv.ui.PlayOptionsMenu
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,6 +63,12 @@ import io.github.superthom196.matv.ui.formatTime
 @Composable
 fun FolderBrowser(vm: AppViewModel, ui: UiState, nav: Nav) {
     val stack by vm.folders.collectAsStateWithLifecycle()
+    val busy by vm.folderBusy.collectAsStateWithLifecycle()
+    var menuFor by remember { mutableStateOf<MediaItem?>(null) }
+    menuFor?.let { m ->
+        val tracks = stack.lastOrNull()?.items?.filter { it.mediaType == "track" } ?: emptyList()
+        PlayOptionsMenu(vm, m, onDismiss = { menuFor = null }, playNow = if (m.mediaType == "track") ({ vm.playTracksFrom(tracks, m) }) else null)
+    }
     LaunchedEffect(ui.connection) { vm.ensureFoldersLoaded() }
     val level = stack.lastOrNull()
     BackHandler(enabled = stack.size > 1) { vm.folderUp() }
@@ -89,6 +98,7 @@ fun FolderBrowser(vm: AppViewModel, ui: UiState, nav: Nav) {
                 PillButton("Play folder", onClick = { vm.playItem(folder) }, icon = Icons.Default.PlayArrow, primary = true)
                 HSpace(10.dp)
             }
+            if (busy) { Text("Loading…", style = MaterialTheme.typography.labelMedium, color = HiFiColors.Muted); HSpace(12.dp) }
             PillButton("Refresh", onClick = { vm.reloadFolders() }, icon = Icons.Default.Refresh)
         }
         VSpace(8.dp)
@@ -107,7 +117,7 @@ fun FolderBrowser(vm: AppViewModel, ui: UiState, nav: Nav) {
                 ) {
                     itemsIndexed(level.items, key = { i, it -> "$i:${it.provider}:${it.itemId}" }) { i, item ->
                         val mod = if (i == 0) Modifier.focusRequester(firstFocus) else Modifier
-                        FolderRow(item, vm.imageUrl(item, 80), modifier = mod) {
+                        FolderRow(item, vm.imageUrl(item, 80), modifier = mod, onLongClick = if (item.name != ".." && item.isPlayable && item.uri != null) ({ menuFor = item }) else null) {
                             when {
                                 item.isFolder && item.name == ".." -> vm.folderUp()
                                 item.isFolder -> vm.openFolder(item)
@@ -124,8 +134,8 @@ fun FolderBrowser(vm: AppViewModel, ui: UiState, nav: Nav) {
 }
 
 @Composable
-private fun FolderRow(item: MediaItem, imageUrl: String?, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    FocusSurface(onClick = onClick, modifier = modifier.fillMaxWidth(), container = Color.Transparent, scale = 1.01f) {
+private fun FolderRow(item: MediaItem, imageUrl: String?, modifier: Modifier = Modifier, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+    FocusSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier.fillMaxWidth(), container = Color.Transparent, scale = 1.01f) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
             val icon: ImageVector? = when (item.mediaType) {
                 "folder" -> Icons.Default.Folder

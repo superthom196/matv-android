@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -23,8 +24,18 @@ data class SavedConfig(
     val hasServer: Boolean get() = !baseUrl.isNullOrBlank() && !token.isNullOrBlank()
 }
 
+/** User-facing settings (Settings screen). */
+data class AppSettings(
+    val defaultTab: String = "artists",
+    val showPlaylists: Boolean = false,
+    val showRadio: Boolean = false,
+)
+
 class Prefs(private val context: Context) {
     private object K {
+        val defaultTab = stringPreferencesKey("default_tab")
+        val showPlaylists = booleanPreferencesKey("show_playlists")
+        val showRadio = booleanPreferencesKey("show_radio")
         val baseUrl = stringPreferencesKey("base_url")
         val token = stringPreferencesKey("token")
         val serverId = stringPreferencesKey("server_id")
@@ -38,6 +49,14 @@ class Prefs(private val context: Context) {
     }
 
     suspend fun current(): SavedConfig = config.first()
+
+    val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
+        AppSettings(p[K.defaultTab] ?: "artists", p[K.showPlaylists] ?: false, p[K.showRadio] ?: false)
+    }
+
+    suspend fun saveSettings(s: AppSettings) {
+        context.dataStore.edit { it[K.defaultTab] = s.defaultTab; it[K.showPlaylists] = s.showPlaylists; it[K.showRadio] = s.showRadio }
+    }
 
     suspend fun saveServer(baseUrl: String, token: String, serverId: String, serverName: String?, username: String) {
         context.dataStore.edit {

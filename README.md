@@ -45,16 +45,22 @@ debug-signed with a different key, reinstalling a build from a different machine
 
 ## Browsing
 
-- **Artists** (default tab): a library grid with artwork, paged as you scroll. Artists without their own
-  image borrow one of their album covers.
-- **Albums**: sorted by artist, then album. A letter tab on the left edge steps to the
-  previous/next artist letter (D-pad up/down), jumps straight into the grid (right), or
-  opens a full A–Z picker (OK) for a big collection.
+- **Artists** (default tab) and **Albums**: library grids with artwork and an A–Z rail down the left
+  edge. Up/Down on the rail steps between letters (the grid follows), Right or OK enters the grid at
+  that letter, Left from the first column returns to the rail. Albums sort by artist, then title.
+  Artists without their own image borrow one of their album covers.
 - **Folders**: the folder tree of your collection, as Music Assistant's Browse page shows it.
   OK on a folder opens it, Back goes up a level. OK on a track plays that track and the rest of the folder.
-  "Play folder" plays a whole folder where the provider allows it.
-- **Queue** (from Now Playing): everything queued on the selected player, with the current track
-  highlighted. OK on a row jumps playback to it.
+- **Favourites**: your favourite artists, albums, tracks and playlists.
+- **Playlists** and **Radio** tabs can be switched on in Settings.
+- **Search** (magnifier in the header): artists, albums, tracks, playlists and radio in your library.
+- **Long-press OK** on anything playable for Play now / Play next / Add to queue / Shuffle / Favourite.
+- **Queue** (from Now Playing): what the selected player has queued, current track highlighted. OK jumps to
+  a track; long-press to move it up or down or remove it; Clear empties the queue.
+- **Players**: long-press a player to sync it with the selected one, or unsync it.
+- **Media keys** on the remote work on every screen, and the app registers a media session so they keep
+  working while another app is in front.
+- **Settings** (gear in the header): default tab, optional tabs, player, server and version info, sign out.
 
 ## Layout
 

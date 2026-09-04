@@ -1,5 +1,13 @@
 package io.github.superthom196.matv.ui.screens
 
+import io.github.superthom196.matv.ui.MenuAction
+import io.github.superthom196.matv.ui.ConfirmMenu
+import io.github.superthom196.matv.ui.ActionMenu
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,6 +65,17 @@ fun QueueScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
     }
     val current = q.currentIndex ?: q.items.indexOfFirst { it.queueItemId == ui.nowPlaying.queueItemId }.takeIf { it >= 0 } ?: 0
     val listState = rememberLazyListState()
+    var menuFor by remember { mutableStateOf<Pair<Int, QueueItem>?>(null) }
+    var confirmClear by remember { mutableStateOf(false) }
+    menuFor?.let { (i, item) ->
+        ActionMenu(item.mediaItem?.name ?: item.name, item.mediaItem?.artistLine, listOf(
+            MenuAction("Play from here", Icons.Default.PlayArrow) { vm.playQueueIndex(i) },
+            MenuAction("Move up", Icons.Default.ArrowUpward) { vm.moveQueueItem(item, -1) },
+            MenuAction("Move down", Icons.Default.ArrowDownward) { vm.moveQueueItem(item, 1) },
+            MenuAction("Remove from queue", Icons.Default.Delete, danger = true) { vm.removeQueueItem(item) },
+        ), onDismiss = { menuFor = null })
+    }
+    if (confirmClear) ConfirmMenu("Clear the queue?", "Stops playback on ${ui.selectedPlayer?.name ?: "the player"}", "Clear queue", onConfirm = { vm.clearQueue() }, onDismiss = { confirmClear = false })
     val currentFocus = remember { FocusRequester() }
     LaunchedEffect(q.items.size, q.loading) {
         if (!q.loading && q.items.isNotEmpty()) {
@@ -75,6 +94,7 @@ fun QueueScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
                     style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted,
                 )
             }
+            if (q.items.isNotEmpty()) { PillButton("Clear", onClick = { confirmClear = true }, icon = Icons.Default.Delete); HSpace(10.dp) }
             PillButton("Refresh", onClick = { vm.refreshQueue() }, icon = Icons.Default.Refresh)
         }
         VSpace(12.dp)
@@ -93,6 +113,7 @@ fun QueueScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
                     QueueRow(
                         i, item, isCurrent, ImageUrls.forQueueItem(ui.baseUrl, item, 80),
                         modifier = if (isCurrent) Modifier.focusRequester(currentFocus) else Modifier,
+                        onLongClick = { menuFor = i to item },
                     ) { vm.playQueueIndex(i) }
                 }
             }
@@ -101,8 +122,8 @@ fun QueueScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
 }
 
 @Composable
-private fun QueueRow(index: Int, item: QueueItem, isCurrent: Boolean, imageUrl: String?, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    FocusSurface(onClick = onClick, modifier = modifier.fillMaxWidth(), container = if (isCurrent) HiFiColors.Surface else Color.Transparent, scale = 1.01f) {
+private fun QueueRow(index: Int, item: QueueItem, isCurrent: Boolean, imageUrl: String?, modifier: Modifier = Modifier, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+    FocusSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier.fillMaxWidth(), container = if (isCurrent) HiFiColors.Surface else Color.Transparent, scale = 1.01f) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(36.dp), contentAlignment = Alignment.Center) {
                 if (isCurrent) Icon(Icons.Default.PlayArrow, null, tint = HiFiColors.Accent, modifier = Modifier.size(22.dp))

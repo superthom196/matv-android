@@ -1,5 +1,10 @@
 package io.github.superthom196.matv.ui.screens
 
+import io.github.superthom196.matv.ui.PlayOptionsMenu
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +63,8 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
     }
     val playFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { playFocus.requestFocus() } }
+    var menuFor by remember { mutableStateOf<MediaItem?>(null) }
+    menuFor?.let { t -> PlayOptionsMenu(vm, t, onDismiss = { menuFor = null }, playNow = { vm.playItem(item, startFrom = t) }) }
 
     Row(Modifier.fillMaxSize().padding(start = 28.dp, end = 28.dp, top = 20.dp)) {
         // Left: artwork + actions
@@ -74,13 +81,21 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
             if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted, maxLines = 2)
             children?.let { Text("${it.size} ${if (item.mediaType == "artist") "albums" else "tracks"}", style = MaterialTheme.typography.bodySmall, color = HiFiColors.Muted) }
             VSpace(24.dp)
-            PillButton("Play", onClick = { vm.playItem(item) }, icon = Icons.Default.PlayArrow, primary = true, modifier = Modifier.focusRequester(playFocus))
-            VSpace(12.dp)
+            val overrides by vm.favOverrides.collectAsStateWithLifecycle()
+            val fav = overrides["${item.provider}:${item.itemId}"] ?: item.favorite
             Row {
-                PillButton("Shuffle", onClick = { vm.playItem(item, option = "replace"); vm.shuffleOn() }, icon = Icons.Default.Shuffle)
+                PillButton("Play", onClick = { vm.playItem(item) }, icon = Icons.Default.PlayArrow, primary = true, modifier = Modifier.focusRequester(playFocus))
                 HSpace(10.dp)
-                PillButton("Queue next", onClick = { vm.playItem(item, option = "next") }, icon = Icons.Default.PlaylistAdd)
+                PillButton("Shuffle", onClick = { vm.playItem(item, option = "replace"); vm.shuffleOn() }, icon = Icons.Default.Shuffle)
             }
+            VSpace(10.dp)
+            Row {
+                PillButton("Play next", onClick = { vm.playItem(item, option = "next") }, icon = Icons.Default.QueueMusic)
+                HSpace(10.dp)
+                PillButton("Add to queue", onClick = { vm.playItem(item, option = "add") }, icon = Icons.Default.PlaylistAdd)
+            }
+            VSpace(10.dp)
+            PillButton(if (fav) "Favourite" else "Add to favourites", onClick = { vm.toggleFavourite(item) }, icon = if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder)
             VSpace(12.dp)
             Text("on ${ui.selectedPlayer?.name ?: "— choose a player —"}", style = MaterialTheme.typography.bodySmall, color = HiFiColors.Muted)
         }
@@ -101,7 +116,7 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
                 }
                 else -> LazyColumn(contentPadding = PaddingValues(top = 4.dp, bottom = 48.dp), verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxSize().focusRestorer()) {
                     itemsIndexed(children!!, key = { i, t -> "$i:${t.provider}:${t.itemId}" }) { i, track ->
-                        TrackRow(i + 1, track, showArtist = item.mediaType == "playlist", onClick = { vm.playItem(item, startFrom = track) })
+                        TrackRow(i + 1, track, showArtist = item.mediaType == "playlist", onClick = { vm.playItem(item, startFrom = track) }, onLongClick = { menuFor = track })
                     }
                 }
             }
@@ -110,8 +125,8 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
 }
 
 @Composable
-private fun TrackRow(n: Int, t: MediaItem, showArtist: Boolean, onClick: () -> Unit) {
-    FocusSurface(onClick = onClick, modifier = Modifier.fillMaxWidth(), container = androidx.compose.ui.graphics.Color.Transparent, scale = 1.01f) {
+private fun TrackRow(n: Int, t: MediaItem, showArtist: Boolean, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
+    FocusSurface(onClick = onClick, onLongClick = onLongClick, modifier = Modifier.fillMaxWidth(), container = androidx.compose.ui.graphics.Color.Transparent, scale = 1.01f) {
         Row(Modifier.padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text((t.trackNumber ?: n).toString(), style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted, modifier = Modifier.width(44.dp))
             Column(Modifier.weight(1f)) {
