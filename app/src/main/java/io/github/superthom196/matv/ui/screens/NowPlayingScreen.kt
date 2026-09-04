@@ -78,7 +78,7 @@ fun NowPlayingScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color(0xDD0B0B0F), Color(0x660B0B0F), Color(0xEE0B0B0F)))))
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x000B0B0F), Color(0xCC0B0B0F)))))
 
-        Row(Modifier.fillMaxSize().padding(horizontal = 64.dp, vertical = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 24.dp), verticalAlignment = Alignment.CenterVertically) {
             Artwork(np.imageUrl, Modifier.size(440.dp), corner = 18.dp)
             HSpace(56.dp)
             Column(Modifier.fillMaxHeight().weight(1f), verticalArrangement = Arrangement.Center) {

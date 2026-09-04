@@ -59,7 +59,7 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
     val playFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { playFocus.requestFocus() } }
 
-    Row(Modifier.fillMaxSize().padding(start = 56.dp, end = 56.dp, top = 40.dp)) {
+    Row(Modifier.fillMaxSize().padding(start = 28.dp, end = 28.dp, top = 20.dp)) {
         // Left: artwork + actions
         Column(Modifier.width(360.dp)) {
             Artwork(vm.imageUrl(item, 512), Modifier.size(320.dp), corner = if (item.mediaType == "artist") 200.dp else 14.dp)
@@ -84,7 +84,7 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
             VSpace(12.dp)
             Text("on ${ui.selectedPlayer?.name ?: "— choose a player —"}", style = MaterialTheme.typography.bodySmall, color = HiFiColors.Muted)
         }
-        HSpace(40.dp)
+        HSpace(28.dp)
         // Right: children
         Box(Modifier.fillMaxSize()) {
             when {

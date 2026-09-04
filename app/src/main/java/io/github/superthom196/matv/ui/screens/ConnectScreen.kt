@@ -55,7 +55,7 @@ fun ConnectScreen(vm: AppViewModel, ui: UiState) {
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(ui.discovered.size) { if (ui.discovered.isNotEmpty()) runCatching { firstFocus.requestFocus() } }
 
-    Row(Modifier.fillMaxSize().padding(horizontal = 72.dp, vertical = 56.dp)) {
+    Row(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 32.dp)) {
         Column(Modifier.width(520.dp)) {
             Text("MATV", style = MaterialTheme.typography.displayMedium, color = HiFiColors.Accent)
             VSpace(8.dp)

@@ -108,7 +108,7 @@ fun PillButton(
         scale = 1.06f,
     ) {
         Row(
-            Modifier.padding(horizontal = 26.dp, vertical = 14.dp),
+            Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -161,9 +161,9 @@ fun Artwork(url: String?, modifier: Modifier = Modifier, corner: androidx.compos
 @Composable
 fun MediaCard(item: MediaItem, imageUrl: String?, onClick: () -> Unit, modifier: Modifier = Modifier, round: Boolean = false) {
     FocusSurface(onClick = onClick, modifier = modifier, container = Color.Transparent, focusedContainer = HiFiColors.SurfaceHigh, scale = 1.05f) {
-        Column(Modifier.padding(10.dp)) {
+        Column(Modifier.padding(7.dp)) {
             Artwork(imageUrl, Modifier.fillMaxWidth().aspectRatio(1f), corner = if (round) 200.dp else 10.dp)
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(6.dp))
             Text(item.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val sub = when (item.mediaType) {
                 "album" -> listOfNotNull(item.artistLine.takeIf { it.isNotBlank() }, item.year?.toString()).joinToString(" · ")

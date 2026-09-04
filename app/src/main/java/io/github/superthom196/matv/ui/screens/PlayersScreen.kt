@@ -37,7 +37,7 @@ fun PlayersScreen(vm: AppViewModel, ui: UiState, onDone: () -> Unit) {
     val first = remember { FocusRequester() }
     LaunchedEffect(players.size) { if (players.isNotEmpty()) runCatching { first.requestFocus() } }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 64.dp, vertical = 48.dp)) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 24.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Which hi-fi?", style = MaterialTheme.typography.displaySmall)
@@ -45,7 +45,7 @@ fun PlayersScreen(vm: AppViewModel, ui: UiState, onDone: () -> Unit) {
             }
             PillButton("Forget server", onClick = { vm.forgetServer() })
         }
-        VSpace(28.dp)
+        VSpace(16.dp)
         if (players.isEmpty()) {
             Text("No players yet. Check that your squeezelite endpoints are running and enabled in Music Assistant.",
                 style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted)

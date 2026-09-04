@@ -73,15 +73,15 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
     val tabFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { tabFocus.requestFocus() } }
 
-    Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 56.dp, top = 32.dp)) {
+    Column(Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, top = 14.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("MATV", style = MaterialTheme.typography.headlineMedium, color = HiFiColors.Accent)
-            HSpace(40.dp)
+            HSpace(28.dp)
             TabRow(selectedTabIndex = tab) {
                 tabs.forEachIndexed { i, (_, label) ->
                     Tab(selected = i == tab, onFocus = { tab = i }, onClick = { tab = i },
                         modifier = if (i == tab) Modifier.focusRequester(tabFocus) else Modifier) {
-                        Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp))
+                        Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
                     }
                 }
             }
@@ -90,7 +90,7 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
             HSpace(14.dp)
             PlayerChip(ui, onClick = { nav.push(MainScreen.Players) })
         }
-        VSpace(20.dp)
+        VSpace(10.dp)
         if (kind == "folders") {
             FolderBrowser(vm, ui, nav)
             return@Column
@@ -201,8 +201,8 @@ private fun AlbumsGrid(vm: AppViewModel, nav: Nav) {
 fun NowPlayingChip(ui: UiState, onClick: () -> Unit) {
     val np = ui.nowPlaying
     FocusSurface(onClick = onClick, shape = androidx.compose.foundation.shape.RoundedCornerShape(50)) {
-        Row(Modifier.padding(start = 8.dp, end = 22.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Artwork(np.imageUrl, Modifier.size(44.dp), corner = 50.dp)
+        Row(Modifier.padding(start = 6.dp, end = 16.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Artwork(np.imageUrl, Modifier.size(36.dp), corner = 50.dp)
             HSpace(12.dp)
             Icon(Icons.Default.PlayArrow, null, tint = if (np.isPlaying) HiFiColors.Good else HiFiColors.Muted, modifier = Modifier.size(22.dp))
             HSpace(6.dp)
@@ -218,7 +218,7 @@ fun NowPlayingChip(ui: UiState, onClick: () -> Unit) {
 @Composable
 fun PlayerChip(ui: UiState, onClick: () -> Unit) {
     FocusSurface(onClick = onClick, shape = androidx.compose.foundation.shape.RoundedCornerShape(50)) {
-        Row(Modifier.padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Speaker, null, tint = HiFiColors.Accent, modifier = Modifier.size(24.dp))
             HSpace(10.dp)
             Text(ui.selectedPlayer?.name ?: "Choose player", style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,

@@ -86,7 +86,7 @@ fun FolderBrowser(vm: AppViewModel, ui: UiState, nav: Nav) {
             }
             PillButton("Refresh", onClick = { vm.reloadFolders() }, icon = Icons.Default.Refresh)
         }
-        VSpace(14.dp)
+        VSpace(8.dp)
         when {
             level == null || level.loading -> Text("Loading…", style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted)
             level.error != null -> Text("Couldn't load: ${level.error}", style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Danger)
@@ -121,7 +121,7 @@ fun FolderBrowser(vm: AppViewModel, ui: UiState, nav: Nav) {
 @Composable
 private fun FolderRow(item: MediaItem, imageUrl: String?, modifier: Modifier = Modifier, onClick: () -> Unit) {
     FocusSurface(onClick = onClick, modifier = modifier.fillMaxWidth(), container = Color.Transparent, scale = 1.01f) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
             val icon: ImageVector? = when (item.mediaType) {
                 "folder" -> Icons.Default.Folder
                 "track" -> Icons.Default.MusicNote
@@ -131,10 +131,10 @@ private fun FolderRow(item: MediaItem, imageUrl: String?, modifier: Modifier = M
                 else -> null
             }
             if (imageUrl != null && item.mediaType != "folder") {
-                Artwork(imageUrl, Modifier.size(52.dp), corner = 6.dp)
+                Artwork(imageUrl, Modifier.size(44.dp), corner = 6.dp)
             } else {
-                Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
-                    Icon(icon ?: Icons.Default.MusicNote, null, tint = if (item.isFolder) HiFiColors.Accent else HiFiColors.Muted, modifier = Modifier.size(34.dp))
+                Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                    Icon(icon ?: Icons.Default.MusicNote, null, tint = if (item.isFolder) HiFiColors.Accent else HiFiColors.Muted, modifier = Modifier.size(28.dp))
                 }
             }
             HSpace(18.dp)
