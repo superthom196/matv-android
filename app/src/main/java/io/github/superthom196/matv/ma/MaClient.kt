@@ -24,6 +24,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
@@ -345,6 +346,12 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
         val el = send("music/$kind/library_items", "limit" to limit, "offset" to offset, "order_by" to orderBy, *extra)
         return decodeList(el, MediaItem.serializer(), "media item")
     }
+
+    /** Total album count, used only for a loading progress readout; null if the command fails or is absent. */
+    suspend fun albumsCount(): Int? = runCatching {
+        val el = send("music/albums/count")
+        (el as? JsonPrimitive)?.intOrNull ?: (el as? JsonObject)?.get("count")?.jsonPrimitive?.intOrNull
+    }.getOrNull()
 
     suspend fun artistAlbums(item: MediaItem, inLibraryOnly: Boolean = false): List<MediaItem> =
         decodeList(send("music/artists/artist_albums", "item_id" to item.itemId, "provider_instance_id_or_domain" to item.provider, "in_library_only" to inLibraryOnly), MediaItem.serializer(), "album")

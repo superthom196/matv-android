@@ -21,11 +21,16 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -42,14 +47,21 @@ import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
 import io.github.superthom196.matv.AppViewModel
 import io.github.superthom196.matv.UiState
+import io.github.superthom196.matv.indexForLetter
+import io.github.superthom196.matv.labelAtIndex
+import io.github.superthom196.matv.stepAnchor
 import io.github.superthom196.matv.ui.Artwork
 import io.github.superthom196.matv.ui.FocusSurface
 import io.github.superthom196.matv.ui.HSpace
 import io.github.superthom196.matv.ui.HiFiColors
+import io.github.superthom196.matv.ui.LetterPickerDialog
+import io.github.superthom196.matv.ui.LetterTab
 import io.github.superthom196.matv.ui.MainScreen
 import io.github.superthom196.matv.ui.MediaCard
 import io.github.superthom196.matv.ui.Nav
 import io.github.superthom196.matv.ui.VSpace
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 private val tabs = listOf("folders" to "Folders", "artists" to "Artists", "albums" to "Albums")
 
@@ -59,7 +71,7 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
     val kind = tabs[tab].first
     val page by vm.library.page(kind).collectAsStateWithLifecycle()
     // Note: the composed `page` can lag one frame behind a tab switch, so ask the store directly.
-    LaunchedEffect(kind, ui.connection) { vm.library.ensureLoaded(kind) }
+    LaunchedEffect(kind, ui.connection) { if (kind == "albums") vm.albums.ensureLoaded() else vm.library.ensureLoaded(kind) }
     val tabFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { tabFocus.requestFocus() } }
 
@@ -83,6 +95,10 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
         VSpace(20.dp)
         if (kind == "folders") {
             FolderBrowser(vm, ui, nav)
+            return@Column
+        }
+        if (kind == "albums") {
+            AlbumsGrid(vm, nav)
             return@Column
         }
         val pageError = page.error
@@ -113,6 +129,83 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
                 Text("Nothing in your library here yet.", style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted, modifier = Modifier.padding(16.dp))
             }
         }
+    }
+}
+
+private data class JumpRequest(val index: Int, val token: Long)
+
+/**
+ * Albums, loaded whole and sorted by artist (see AlbumIndex.kt) so an A-Z jump can be exact.
+ * No infinite scroll here: everything is already in memory once `state.ready`.
+ */
+@Composable
+private fun AlbumsGrid(vm: AppViewModel, nav: Nav) {
+    val state by vm.albums.state.collectAsStateWithLifecycle()
+
+    if (!state.ready) {
+        Column(Modifier.fillMaxSize()) {
+            val err = state.error
+            if (err != null) {
+                Text(err, style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Danger)
+                VSpace(8.dp)
+                Text("Press OK on a tab to retry.", style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted)
+            } else {
+                Text("Sorting your albums by artist…", style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted)
+                VSpace(8.dp)
+                val of = state.total?.let { " of $it" } ?: ""
+                Text("${state.loaded}$of", style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted)
+            }
+        }
+        return
+    }
+
+    val gridState = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
+    var showPicker by remember { mutableStateOf(false) }
+    var jump by remember { mutableStateOf<JumpRequest?>(null) }
+    val itemFocus = remember { FocusRequester() }
+    val focusIndex = jump?.index ?: 0
+    val currentLabel by remember(state.anchors) { derivedStateOf { labelAtIndex(state.anchors, gridState.firstVisibleItemIndex) } }
+
+    LaunchedEffect(jump?.token) {
+        val target = jump ?: return@LaunchedEffect
+        gridState.scrollToItem(target.index)
+        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.any { it.index == target.index } }.first { it }
+        withFrameNanos { }
+        runCatching { itemFocus.requestFocus() }
+    }
+
+    Row(Modifier.fillMaxSize()) {
+        LetterTab(
+            currentLabel = { currentLabel },
+            onStep = { forward -> stepAnchor(state.anchors, gridState.firstVisibleItemIndex, forward)?.let { scope.launch { gridState.scrollToItem(it) } } },
+            onOpenPicker = { showPicker = true },
+            onEnterGrid = { runCatching { itemFocus.requestFocus() } },
+        )
+        HSpace(10.dp)
+        LazyVerticalGrid(
+            state = gridState,
+            columns = GridCells.Fixed(6),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            contentPadding = PaddingValues(bottom = 48.dp, top = 6.dp),
+            modifier = Modifier.fillMaxSize().focusRestorer(),
+        ) {
+            itemsIndexed(state.items, key = { _, it -> "${it.provider}:${it.itemId}" }) { index, item ->
+                val mod = if (index == focusIndex) Modifier.focusRequester(itemFocus) else Modifier
+                val url = vm.imageUrl(item, 256)
+                MediaCard(item, url, onClick = { nav.push(MainScreen.Detail(item)) }, modifier = mod)
+            }
+        }
+    }
+
+    if (showPicker) {
+        LetterPickerDialog(
+            anchors = state.anchors,
+            currentLabel = currentLabel,
+            onPick = { label -> showPicker = false; jump = JumpRequest(indexForLetter(state.anchors, label), (jump?.token ?: 0L) + 1) },
+            onDismiss = { showPicker = false },
+        )
     }
 }
 

@@ -17,7 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
@@ -98,13 +97,6 @@ fun NowPlayingScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
                         style = MaterialTheme.typography.labelMedium, color = HiFiColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
-                    HSpace(10.dp)
-                    RoundIconButton(
-                        if (player?.volumeMuted == true) Icons.Default.VolumeOff else Icons.Default.VolumeUp, "Mute",
-                        onClick = { vm.toggleMute() }, size = 52.dp,
-                    )
-                    HSpace(8.dp)
-                    RoundIconButton(Icons.Default.PowerSettingsNew, "Power", onClick = { vm.togglePower() }, size = 52.dp)
                 }
                 VSpace(16.dp)
                 if (np.hasMedia) {

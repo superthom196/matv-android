@@ -18,6 +18,11 @@ schema 28) and the official Python client. Useful background if you're touching
 - Artwork: `{base}/imageproxy/{proxy_id}?size=N` or legacy
   `{base}/imageproxy?path=<double-encoded>&provider=..&size=N`, sizes
   80/160/256/512/1024.
+- `music/albums/library_items`'s `order_by` is a free-text field on the `Album` DB row
+  (`sort_name`, `timestamp_added`, ...) — there's no artist column to sort by server-side
+  (`artists` is a many-to-many relation), so sorting albums by artist has to happen
+  client-side after fetching the whole library. `music/albums/count` returns the total
+  album count.
 
 ## Scope
 

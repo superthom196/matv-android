@@ -95,6 +95,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = Prefs(app)
     private val discovery = MaDiscovery(app, client)
     val library = LibraryStore(viewModelScope) { kind, offset, limit -> client.libraryItems(kind, offset, limit) }
+    val albums = AlbumIndex(viewModelScope, count = { client.albumsCount() }, fetch = { off, lim -> client.libraryItems("albums", off, lim) })
 
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
@@ -236,6 +237,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             prefs.clearServer()
             queues.clear()
             library.reset()
+            albums.reset()
             _folders.value = emptyList()
             AuthHolder.token = null
             _ui.value = UiState(phase = Phase.Connect)
@@ -248,6 +250,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun afterConnected(cfg: SavedConfig) {
         AuthHolder.token = cfg.token
         library.reset()
+        albums.reset()
         _folders.value = emptyList()
         _ui.update {
             it.copy(
@@ -391,8 +394,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun volumeUp() = withPlayer { client.playerCmd("volume_up", it) }
     fun volumeDown() = withPlayer { client.playerCmd("volume_down", it) }
     fun setVolume(level: Int) = withPlayer { client.playerCmd("volume_set", it, "volume_level" to level.coerceIn(0, 100)) }
-    fun toggleMute() = withPlayer { p -> client.playerCmd("volume_mute", p, "muted" to !(_ui.value.selectedPlayer?.volumeMuted ?: false)) }
-    fun togglePower() = withPlayer { p -> client.playerCmd("power", p, "powered" to !(_ui.value.selectedPlayer?.powered ?: true)) }
     fun shuffleOn() {
         val q = _ui.value.activeQueueId ?: return
         cmd { client.send("player_queues/shuffle", "queue_id" to q, "shuffle_enabled" to true) }

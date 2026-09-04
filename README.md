@@ -48,7 +48,10 @@ debug-signed with a different key, reinstalling a build from a different machine
 - **Folders** (default tab): the folder tree of your collection, as Music Assistant's Browse page shows it.
   OK on a folder opens it, Back goes up a level. OK on a track plays that track and the rest of the folder.
   "Play folder" plays a whole folder where the provider allows it.
-- **Artists** and **Albums**: library grids with artwork, paged as you scroll.
+- **Artists**: a library grid with artwork, paged as you scroll.
+- **Albums**: sorted by artist, then album. A letter tab on the left edge steps to the
+  previous/next artist letter (D-pad up/down), jumps straight into the grid (right), or
+  opens a full A–Z picker (OK) for a big collection.
 
 ## Layout
 
