@@ -348,6 +348,11 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
     }
 
     /** Total album count, used only for a loading progress readout; null if the command fails or is absent. */
+    suspend fun artistsCount(): Int? = runCatching {
+        val el = send("music/artists/count", "album_artists_only" to true)
+        (el as? JsonPrimitive)?.intOrNull ?: (el as? JsonObject)?.get("count")?.jsonPrimitive?.intOrNull
+    }.getOrNull()
+
     suspend fun albumsCount(): Int? = runCatching {
         val el = send("music/albums/count")
         (el as? JsonPrimitive)?.intOrNull ?: (el as? JsonObject)?.get("count")?.jsonPrimitive?.intOrNull

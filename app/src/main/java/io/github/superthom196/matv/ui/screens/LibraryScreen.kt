@@ -52,6 +52,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Tab
 import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
+import io.github.superthom196.matv.AlbumIndex
 import io.github.superthom196.matv.AppViewModel
 import io.github.superthom196.matv.UiState
 import io.github.superthom196.matv.indexForLetter
@@ -74,13 +75,12 @@ private val tabs = listOf("artists" to "Artists", "albums" to "Albums", "folders
 fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
     var tab by rememberSaveable { mutableIntStateOf(0) } // opens on Artists
     val kind = tabs[tab].first
-    val page by vm.library.page(kind).collectAsStateWithLifecycle()
     // Note: the composed `page` can lag one frame behind a tab switch, so ask the store directly.
     LaunchedEffect(kind, ui.connection) {
         when (kind) {
             "albums" -> vm.albums.ensureLoaded()
-            "folders" -> Unit // FolderBrowser loads itself via music/browse
-            else -> vm.library.ensureLoaded(kind)
+            "artists" -> vm.artists.ensureLoaded()
+            else -> Unit // FolderBrowser loads itself via music/browse
         }
     }
     val tabFocus = remember { FocusRequester() }
@@ -108,50 +108,18 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
             FolderBrowser(vm, ui, nav)
             return@Column
         }
-        if (kind == "albums") {
-            AlbumsGrid(vm, nav)
-            return@Column
-        }
-        val pageError = page.error
-        if (pageError != null && page.items.isEmpty()) {
-            Text(pageError, style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Danger)
-            VSpace(8.dp)
-            Text("Press OK on a tab to retry.", style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted)
-        }
-        val gridState = rememberLazyGridState()
-        LazyVerticalGrid(
-            state = gridState,
-            columns = GridCells.Fixed(if (kind == "artists") 7 else 6),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            contentPadding = PaddingValues(bottom = 48.dp, top = 6.dp),
-            modifier = Modifier.fillMaxSize().focusRestorer(),
-        ) {
-            itemsIndexed(page.items, key = { _, it -> "${it.provider}:${it.itemId}" }) { index, item ->
-                if (index >= page.items.size - 12) LaunchedEffect(kind, page.items.size) { vm.library.loadMore(kind) }
-                val own = vm.imageUrl(item, 256)
-                val url = if (own == null && kind == "artists") vm.artistCover(item, 256).collectAsStateWithLifecycle().value else own
-                MediaCard(item, url, onClick = { nav.push(MainScreen.Detail(item)) }, round = kind == "artists")
-            }
-            if (page.loading) item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                Text("Loading…", style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted, modifier = Modifier.padding(16.dp))
-            }
-            if (!page.loading && page.end && page.items.isEmpty() && page.error == null) item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                Text("Nothing in your library here yet.", style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted, modifier = Modifier.padding(16.dp))
-            }
-        }
+        if (kind == "albums") IndexedGrid(vm, nav, vm.albums, columns = 6, round = false, loadingText = "Sorting your albums by artist…")
+        else IndexedGrid(vm, nav, vm.artists, columns = 7, round = true, loadingText = "Sorting your artists…")
     }
 }
 
+/** A request to scroll to and focus a grid index; `token` makes repeat jumps to the same index re-fire. */
 private data class JumpRequest(val index: Int, val token: Long)
 
-/**
- * Albums, loaded whole and sorted by artist (see AlbumIndex.kt) so an A-Z jump can be exact.
- * No infinite scroll here: everything is already in memory once `state.ready`.
- */
+/** Artists and Albums share this: the whole library loaded once, sorted, with the A-Z rail on the left. */
 @Composable
-private fun AlbumsGrid(vm: AppViewModel, nav: Nav) {
-    val state by vm.albums.state.collectAsStateWithLifecycle()
+private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: Int, round: Boolean, loadingText: String) {
+    val state by index.state.collectAsStateWithLifecycle()
 
     if (!state.ready) {
         Column(Modifier.fillMaxSize()) {
@@ -161,7 +129,7 @@ private fun AlbumsGrid(vm: AppViewModel, nav: Nav) {
                 VSpace(8.dp)
                 Text("Press OK on a tab to retry.", style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted)
             } else {
-                Text("Sorting your albums by artist…", style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted)
+                Text(loadingText, style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted)
                 VSpace(8.dp)
                 val of = state.total?.let { " of $it" } ?: ""
                 Text("${state.loaded}$of", style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted)
@@ -206,7 +174,7 @@ private fun AlbumsGrid(vm: AppViewModel, nav: Nav) {
         HSpace(10.dp)
         LazyVerticalGrid(
             state = gridState,
-            columns = GridCells.Fixed(6),
+            columns = GridCells.Fixed(columns),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
             contentPadding = PaddingValues(bottom = 48.dp, top = 6.dp),
@@ -215,7 +183,7 @@ private fun AlbumsGrid(vm: AppViewModel, nav: Nav) {
                 .focusRestorer()
                 // Left from the first column hands focus to the A-Z rail (2D focus search does not find it on its own).
                 .onPreviewKeyEvent { ev ->
-                    if (ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionLeft && focusedIndex % 6 == 0) {
+                    if (ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionLeft && focusedIndex % columns == 0) {
                         runCatching { railFocus.requestFocus() }.isSuccess
                     } else false
                 },
@@ -224,8 +192,9 @@ private fun AlbumsGrid(vm: AppViewModel, nav: Nav) {
                 val mod = Modifier
                     .onFocusChanged { if (it.isFocused) focusedIndex = index }
                     .then(if (index == focusIndex) Modifier.focusRequester(itemFocus) else Modifier)
-                val url = vm.imageUrl(item, 256)
-                MediaCard(item, url, onClick = { nav.push(MainScreen.Detail(item)) }, modifier = mod)
+                val own = vm.imageUrl(item, 256)
+                val url = if (own == null && round) vm.artistCover(item, 256).collectAsStateWithLifecycle().value else own
+                MediaCard(item, url, onClick = { nav.push(MainScreen.Detail(item)) }, modifier = mod, round = round)
             }
         }
     }

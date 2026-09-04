@@ -96,8 +96,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val client = MaClient()
     private val prefs = Prefs(app)
     private val discovery = MaDiscovery(app, client)
-    val library = LibraryStore(viewModelScope) { kind, offset, limit -> client.libraryItems(kind, offset, limit) }
     val albums = AlbumIndex(viewModelScope, count = { client.albumsCount() }, fetch = { off, lim -> client.libraryItems("albums", off, lim) })
+    val artists = AlbumIndex(viewModelScope, count = { client.artistsCount() }, fetch = { off, lim -> client.libraryItems("artists", off, lim) }, sortKey = ::artistNameKey)
 
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
@@ -246,8 +246,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             client.disconnect()
             prefs.clearServer()
             queues.clear()
-            library.reset()
             albums.reset()
+            artists.reset()
             _folders.value = emptyList()
             AuthHolder.token = null
             _ui.value = UiState(phase = Phase.Connect)
@@ -259,8 +259,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun afterConnected(cfg: SavedConfig) {
         AuthHolder.token = cfg.token
-        library.reset()
         albums.reset()
+        artists.reset()
         _folders.value = emptyList()
         _ui.update {
             it.copy(

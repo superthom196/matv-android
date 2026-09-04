@@ -85,8 +85,6 @@ fun NowPlayingScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
             Column(Modifier.fillMaxHeight().weight(1f), verticalArrangement = Arrangement.Center) {
                 // Player chip / state
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    PillButton(player?.name ?: "Choose player", onClick = { nav.push(MainScreen.Players) })
-                    HSpace(10.dp)
                     PillButton("Queue", onClick = { nav.push(MainScreen.Queue) }, icon = Icons.AutoMirrored.Filled.QueueMusic)
                     HSpace(14.dp)
                     Text(

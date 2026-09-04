@@ -37,6 +37,8 @@ class AlbumIndex(
     private val scope: CoroutineScope,
     private val count: suspend () -> Int?,
     private val fetch: suspend (offset: Int, limit: Int) -> List<MediaItem>,
+    /** Primary sort key and letter bucket: album artist for albums, the artist's own name for artists. */
+    private val sortKey: (MediaItem) -> String = ::artistSortKey,
 ) {
     private val _state = MutableStateFlow(AlbumsByArtist())
     val state: StateFlow<AlbumsByArtist> = _state.asStateFlow()
@@ -67,7 +69,7 @@ class AlbumIndex(
                     _state.update { it.copy(loaded = all.size) }
                     if (batch.size < BATCH || offset >= HARD_CAP) break
                 }
-                val (sorted, anchors) = withContext(Dispatchers.Default) { buildAlbumIndex(all) }
+                val (sorted, anchors) = withContext(Dispatchers.Default) { buildAlbumIndex(all, sortKey) }
                 _state.value = AlbumsByArtist(items = sorted, anchors = anchors, ready = true, loaded = sorted.size, total = total)
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Failed to load albums") }
@@ -91,13 +93,17 @@ internal fun foldKey(raw: String): String {
     return nonWordRegex.replace(normalized, "").let { whitespaceRegex.replace(it, " ") }.trim()
 }
 
-/** Primary (first-listed) artist name, folded and with a leading "The " dropped for filing purposes. */
-internal fun artistSortKey(item: MediaItem): String {
-    val name = item.artists?.firstOrNull { it.name.isNotBlank() }?.name ?: ""
-    val key = foldKey(name)
+private fun dropThe(key: String): String {
     val prefix = "the "
     return if (key.length > prefix.length && key.startsWith(prefix)) key.substring(prefix.length) else key
 }
+
+/** Primary (first-listed) artist name, folded and with a leading "The " dropped for filing purposes. */
+internal fun artistSortKey(item: MediaItem): String =
+    dropThe(foldKey(item.artists?.firstOrNull { it.name.isNotBlank() }?.name ?: ""))
+
+/** An artist's own name (sort_name when the server has one), for the Artists index. */
+internal fun artistNameKey(item: MediaItem): String = dropThe(foldKey(item.sortName ?: item.name))
 
 /** The letter this sort key files under: 'A'..'Z', or '#' for anything else (blank, digits, symbols). */
 internal fun bucketOf(key: String): Char {
@@ -120,9 +126,9 @@ private val albumComparator = compareBy<Keyed>(
 )
 
 /** Sorts by artist (then album title, then year) and records where each letter's run begins. */
-internal fun buildAlbumIndex(raw: List<MediaItem>): Pair<List<MediaItem>, List<LetterAnchor>> {
+internal fun buildAlbumIndex(raw: List<MediaItem>, sortKey: (MediaItem) -> String = ::artistSortKey): Pair<List<MediaItem>, List<LetterAnchor>> {
     val keyed = raw.map { item ->
-        val artistKey = artistSortKey(item)
+        val artistKey = sortKey(item)
         Keyed(item, artistKey, foldKey(item.sortName ?: item.name), bucketOf(artistKey))
     }.sortedWith(albumComparator)
 
