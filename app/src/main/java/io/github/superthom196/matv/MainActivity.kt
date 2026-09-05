@@ -32,13 +32,25 @@ class MainActivity : ComponentActivity() {
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN && event.keyCode in dpadKeys) io.github.superthom196.matv.ui.DpadTracker.stamp()
-        // Volume first, and repeats included so holding the rocker ramps. Consuming these stops the
-        // Bravia's audio HAL from moving the TV's own speakers instead (it never consults the
-        // MediaSession's remote VolumeProvider, so intercepting here is the only thing that works).
-        if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-            if (event.action == KeyEvent.ACTION_DOWN) {
-                vm.nudgeVolume(if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP) 1 else -1)
-            }
+        // Volume first, and repeats included so holding a button ramps.
+        //
+        // Channel up / down are the ones that actually reach us on a Bravia: Sony's platform takes
+        // the volume rocker below the app and drives the TV's own speakers with it, so those keys
+        // are never dispatched here at all. The VOLUME_UP/DOWN arm is kept for TVs that do deliver
+        // them; on this one it simply never fires.
+        val volumeStep = when (event.keyCode) {
+            KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_VOLUME_UP -> 1
+            KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_VOLUME_DOWN -> -1
+            else -> 0
+        }
+        if (volumeStep != 0) {
+            if (event.action == KeyEvent.ACTION_DOWN) vm.nudgeVolume(volumeStep)
+            return true
+        }
+        // A Bravia delivers MUTE but swallows VOLUME_MUTE, the same way it swallows the volume
+        // rocker. Both are handled so either remote convention works.
+        if (event.keyCode == KeyEvent.KEYCODE_VOLUME_MUTE || event.keyCode == KeyEvent.KEYCODE_MUTE) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) vm.toggleMute()
             return true
         }
         if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {

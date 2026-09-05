@@ -454,6 +454,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun volumeDown() = withPlayer { client.playerCmd("volume_down", it) }
     fun setVolume(level: Int) = withPlayer { client.playerCmd("volume_set", it, "volume_level" to level.coerceIn(0, 100)) }
 
+    /** Level to come back to when a software mute is lifted; null when not software-muted. */
+    private var preMuteLevel: Int? = null
+
+    /**
+     * Mute / unmute the hi-fi. Players that advertise volume_mute get the real thing; the rest —
+     * a Squeezelite endpoint answers "This feature is not supported" — get a software mute that
+     * drops the level to zero and puts it back.
+     */
+    fun toggleMute() {
+        val player = _ui.value.selectedPlayer ?: run { flash("Choose a player first"); return }
+        if (player.supportedFeatures?.contains("volume_mute") == true) {
+            val muted = player.volumeMuted == true
+            withPlayer { client.playerCmd("volume_mute", it, "muted" to !muted) }
+            return
+        }
+        val restore = preMuteLevel
+        if (restore != null) {
+            preMuteLevel = null
+            setVolume(restore)
+        } else {
+            preMuteLevel = player.volumeLevel ?: 0
+            setVolume(0)
+        }
+    }
+
     /**
      * One notch of the TV remote's volume rocker. The hi-fi's 0-100 range is split into
      * [TV_VOLUME_STEPS] notches, so a full TV scale is full output.
