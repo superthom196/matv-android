@@ -61,9 +61,29 @@ data class NowPlaying(
     val shuffle: Boolean = false,
     val repeat: String = "off",
     val queueItemId: String? = null,
+    val bitDepth: Int? = null,
+    val sampleRateKhz: String? = null,
+    val codec: String = "",
+    val fidelity: String? = null,
 ) {
     val hasMedia: Boolean get() = title.isNotBlank()
     val isPlaying: Boolean get() = state == "playing"
+
+    /** Music Assistant's own verdict on the source file, not a guess from the numbers. */
+    val isHiRes: Boolean get() = fidelity == "hi_res"
+
+    /** e.g. "FLAC 24/44.1" — blank when the server has not told us what it is streaming. */
+    val formatLabel: String
+        get() {
+            val depth = bitDepth?.let { "$it" }
+            val rate = sampleRateKhz
+            val bits = when {
+                depth != null && rate != null -> "$depth/$rate"
+                rate != null -> "$rate kHz"
+                else -> null
+            }
+            return listOfNotNull(codec.uppercase().takeIf { it.isNotBlank() && it != "?" }, bits).joinToString(" ")
+        }
 }
 
 data class UiState(
@@ -389,6 +409,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val q = st.activeQueueId?.let { queues[it] }
         val base = st.baseUrl
         val cur = q?.currentItem
+        val fmt = cur?.streamdetails?.audioFormat
         val mi = cur?.mediaItem
         val pm = player?.currentMedia
         val np = NowPlaying(
@@ -404,6 +425,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             shuffle = q?.shuffleEnabled ?: false,
             repeat = q?.repeatMode ?: "off",
             queueItemId = cur?.queueItemId ?: pm?.queueItemId,
+            bitDepth = fmt?.bitDepth,
+            sampleRateKhz = fmt?.sampleRateKhz,
+            codec = fmt?.contentType.orEmpty(),
+            fidelity = cur?.streamdetails?.fidelity,
         )
         _ui.update { it.copy(nowPlaying = np) }
         ensureTicker(np.isPlaying)
@@ -452,7 +477,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun previous() = withPlayer { client.playerCmd("previous", it) }
     fun volumeUp() = withPlayer { client.playerCmd("volume_up", it) }
     fun volumeDown() = withPlayer { client.playerCmd("volume_down", it) }
-    fun setVolume(level: Int) = withPlayer { client.playerCmd("volume_set", it, "volume_level" to level.coerceIn(0, 100)) }
+    fun setVolume(level: Int) {
+        flashVolumeHud(level, muted = false)
+        withPlayer { client.playerCmd("volume_set", it, "volume_level" to level.coerceIn(0, 100)) }
+    }
+
+    /** Transient volume readout, shown by the dial overlay and cleared on a timer. */
+    data class VolumeHud(val level: Int, val muted: Boolean, val stamp: Long = System.currentTimeMillis())
+
+    private val _volumeHud = MutableStateFlow<VolumeHud?>(null)
+    val volumeHud: StateFlow<VolumeHud?> = _volumeHud.asStateFlow()
+    private var hudJob: kotlinx.coroutines.Job? = null
+
+    private fun flashVolumeHud(level: Int, muted: Boolean) {
+        _volumeHud.value = VolumeHud(level.coerceIn(0, 100), muted)
+        hudJob?.cancel()
+        hudJob = viewModelScope.launch { kotlinx.coroutines.delay(1800); _volumeHud.value = null }
+    }
 
     /** Level to come back to when a software mute is lifted; null when not software-muted. */
     private var preMuteLevel: Int? = null
@@ -466,6 +507,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val player = _ui.value.selectedPlayer ?: run { flash("Choose a player first"); return }
         if (player.supportedFeatures?.contains("volume_mute") == true) {
             val muted = player.volumeMuted == true
+            flashVolumeHud(player.volumeLevel ?: 0, muted = !muted)
             withPlayer { client.playerCmd("volume_mute", it, "muted" to !muted) }
             return
         }
@@ -476,6 +518,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             preMuteLevel = player.volumeLevel ?: 0
             setVolume(0)
+            flashVolumeHud(0, muted = true)
         }
     }
 

@@ -105,6 +105,24 @@ fun NowPlayingScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
                     VSpace(6.dp)
                     Text(np.artist, style = MaterialTheme.typography.headlineSmall, color = HiFiColors.Accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (np.album.isNotBlank()) Text(np.album, style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    // What is actually coming off disk, straight from the queue's stream details.
+                    if (np.formatLabel.isNotBlank()) {
+                        VSpace(8.dp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (np.isHiRes) {
+                                Text(
+                                    "HI-RES",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = HiFiColors.Background,
+                                    modifier = Modifier
+                                        .background(HiFiColors.Accent, RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 7.dp, vertical = 2.dp),
+                                )
+                                HSpace(10.dp)
+                            }
+                            Text(np.formatLabel, style = MaterialTheme.typography.labelMedium, color = HiFiColors.Muted)
+                        }
+                    }
                 } else {
                     Text("Nothing playing", style = MaterialTheme.typography.displaySmall, color = HiFiColors.Muted)
                     Text("Pick something from the library.", style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted)

@@ -157,6 +157,46 @@ data class QueueItem(
     val index: Int? = null,
     val image: MediaItemImage? = null,
     @SerialName("media_item") val mediaItem: MediaItem? = null,
+    val streamdetails: StreamDetails? = null,
+)
+
+/**
+ * What the server is actually streaming. Only the queue's current item carries this — a library
+ * album's own `audio_format` is a placeholder the file providers never fill in.
+ */
+@Serializable
+data class StreamDetails(
+    @SerialName("audio_format") val audioFormat: AudioFormat? = null,
+    @SerialName("audio_processing") val audioProcessing: AudioProcessing? = null,
+) {
+    /** Music Assistant's own verdict: "hi_res", "lossless", "lossy". */
+    val fidelity: String? get() = audioProcessing?.inputFidelity?.quality
+}
+
+@Serializable
+data class AudioFormat(
+    @SerialName("content_type") val contentType: String = "",
+    @SerialName("sample_rate") val sampleRate: Int? = null,
+    @SerialName("bit_depth") val bitDepth: Int? = null,
+    val channels: Int? = null,
+    @SerialName("bit_rate") val bitRate: Int? = null,
+) {
+    /** 44100 -> "44.1", 48000 -> "48", 192000 -> "192". */
+    val sampleRateKhz: String? get() = sampleRate?.let {
+        val khz = it / 1000.0
+        if (khz == khz.toInt().toDouble()) khz.toInt().toString() else String.format("%.1f", khz)
+    }
+}
+
+@Serializable
+data class AudioProcessing(
+    @SerialName("input_fidelity") val inputFidelity: InputFidelity? = null,
+)
+
+@Serializable
+data class InputFidelity(
+    val quality: String? = null,
+    @SerialName("bit_perfect") val bitPerfect: Boolean? = null,
 )
 
 @Serializable

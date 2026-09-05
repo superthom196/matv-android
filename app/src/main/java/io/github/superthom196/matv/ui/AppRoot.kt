@@ -69,6 +69,9 @@ fun AppRoot(vm: AppViewModel) {
             Phase.Login -> LoginScreen(vm, ui)
             Phase.Main -> MainFlow(vm)
         }
+        // Volume dial: pops up over everything on any volume or mute change, then clears itself.
+        val hud by vm.volumeHud.collectAsStateWithLifecycle()
+        hud?.let { VolumeDial(it, Modifier.align(Alignment.Center)) }
         // Connection badge: visible whenever the socket is not simply "connected".
         val conn = ui.connection
         if (ui.phase == Phase.Main && conn !is ConnectionState.Connected) {
