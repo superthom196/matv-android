@@ -28,6 +28,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import io.github.superthom196.matv.R
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.activity.compose.BackHandler
@@ -101,7 +104,10 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
 
     Column(Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("MATV", style = MaterialTheme.typography.headlineLarge.copy(fontSize = 30.sp, fontWeight = FontWeight.Bold), color = HiFiColors.Accent)
+            // The logo already reads "MA", so the wordmark only needs the TV.
+            Image(painterResource(R.drawable.logo_ma), contentDescription = "MATV", modifier = Modifier.size(30.dp))
+            HSpace(7.dp)
+            Text("TV", style = MaterialTheme.typography.headlineLarge.copy(fontSize = 30.sp, fontWeight = FontWeight.Bold), color = HiFiColors.Accent)
             HSpace(12.dp)
             TabRow(selectedTabIndex = tab) {
                 tabs.forEachIndexed { i, (_, label) ->
@@ -111,9 +117,9 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
                     }
                 }
             }
-            Box(Modifier.weight(1f))
+            HSpace(6.dp)
             IconChip(Icons.Default.Search, "Search", onClick = { nav.push(MainScreen.Search) })
-            HSpace(4.dp)
+            Box(Modifier.weight(1f))
             NowPlayingChip(ui, onClick = { nav.push(MainScreen.NowPlaying) })
             HSpace(4.dp)
             IconChip(Icons.Default.Settings, "Settings", onClick = { nav.push(MainScreen.Settings) })
