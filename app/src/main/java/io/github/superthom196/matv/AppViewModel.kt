@@ -121,6 +121,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val playlists = AlbumIndex(viewModelScope, count = { client.libraryCount("playlists") }, fetch = { off, lim -> client.libraryItems("playlists", off, lim) }, sortKey = ::artistNameKey)
     val radios = AlbumIndex(viewModelScope, count = { client.libraryCount("radios") }, fetch = { off, lim -> client.libraryItems("radios", off, lim) }, sortKey = ::artistNameKey)
 
+    /**
+     * Seed for the Random row, fixed for the life of the app. Reshuffling on every recomposition
+     * would move albums under you as you came back from one, so the order holds until a restart.
+     */
+    private val shuffleSeed = System.nanoTime()
+
+    fun shuffledAlbums(items: List<MediaItem>): List<MediaItem> = items.shuffled(kotlin.random.Random(shuffleSeed))
+
+    /** Newest-first albums for the "Latest" row; the server does the ordering.  */
+    val recentAlbums = RecentAlbums(viewModelScope) { off, lim ->
+        client.libraryItems("albums", off, lim, orderBy = "timestamp_added_desc")
+    }
+
     /** Hi-res verdicts per album, learned in the background and cached on disk. */
     val hiRes = HiResIndex(viewModelScope, prefs, tracksOf = { client.albumTracks(it) })
 

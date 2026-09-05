@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -27,6 +28,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import io.github.superthom196.matv.ui.SectionLabel
 import androidx.compose.runtime.remember
 import io.github.superthom196.matv.R
 import androidx.compose.ui.res.painterResource
@@ -128,7 +134,7 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
             return@Column
         }
         when (kind) {
-            "albums" -> IndexedGrid(vm, nav, vm.albums, columns = 6, round = false, loadingText = "Sorting your albums by artist…", onBackToTop = { runCatching { tabFocus.requestFocus() } })
+            "albums" -> IndexedGrid(vm, nav, vm.albums, columns = 6, round = false, loadingText = "Sorting your albums by artist…", onBackToTop = { runCatching { tabFocus.requestFocus() } }, showTopRows = true)
             "playlists" -> IndexedGrid(vm, nav, vm.playlists, columns = 6, round = false, loadingText = "Loading playlists…", onBackToTop = { runCatching { tabFocus.requestFocus() } })
             "radio" -> IndexedGrid(vm, nav, vm.radios, columns = 6, round = false, loadingText = "Loading radio stations…", onBackToTop = { runCatching { tabFocus.requestFocus() } })
             "favourites" -> FavouritesTab(vm, nav)
@@ -154,8 +160,40 @@ fun openOrPlay(vm: AppViewModel, nav: Nav, item: MediaItem) {
 private data class JumpRequest(val index: Int, val token: Long)
 
 /** Artists and Albums share this: the whole library loaded once, sorted, with the A-Z rail on the left. */
+/** One horizontal shelf of albums above the A-Z grid. Pages in more as it nears its end. */
 @Composable
-private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: Int, round: Boolean, loadingText: String, onBackToTop: () -> Unit) {
+private fun AlbumRow(
+    vm: AppViewModel,
+    nav: Nav,
+    title: String,
+    items: List<MediaItem>,
+    hiResAlbums: Set<String>,
+    onNearEnd: (Int) -> Unit,
+) {
+    val rowState = rememberLazyListState()
+    val lastVisible by remember { derivedStateOf { rowState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 } }
+    LaunchedEffect(lastVisible) { onNearEnd(lastVisible) }
+    Column(Modifier.padding(bottom = 10.dp)) {
+        SectionLabel(title, Modifier.padding(start = 8.dp, bottom = 4.dp))
+        LazyRow(
+            state = rowState,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth().focusRestorer(),
+        ) {
+            items(items, key = { "$title:${it.provider}:${it.itemId}" }) { item ->
+                MediaCard(
+                    item, vm.imageUrl(item, 256),
+                    onClick = { openOrPlay(vm, nav, item) },
+                    modifier = Modifier.width(150.dp),
+                    hiRes = HiResIndex.marks(item, hiResAlbums),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: Int, round: Boolean, loadingText: String, onBackToTop: () -> Unit, showTopRows: Boolean = false) {
     val state by index.state.collectAsStateWithLifecycle()
     val hiResAlbums by vm.hiRes.hiRes.collectAsStateWithLifecycle()
 
@@ -176,18 +214,32 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
         return
     }
 
+    // Latest and Random ride above the A-Z grid as full-span rows, so there is no nested scrolling
+    // and the whole page scrolls as one. Both are the full library, not a capped carousel.
+    val recent by vm.recentAlbums.items.collectAsStateWithLifecycle()
+    LaunchedEffect(showTopRows) { if (showTopRows) vm.recentAlbums.ensureLoaded() }
+    // Seeded in the view model, so the order holds while you browse in and out of albums.
+    val shuffled = remember(state.items, showTopRows) { if (showTopRows) vm.shuffledAlbums(state.items) else emptyList() }
+    val topRows = if (!showTopRows) emptyList() else listOfNotNull(
+        ("Latest" to recent).takeIf { recent.isNotEmpty() },
+        ("Random" to shuffled).takeIf { shuffled.isNotEmpty() },
+    )
+    val headers = topRows.size
+
     val gridState = rememberLazyGridState()
     var menuFor by remember { mutableStateOf<MediaItem?>(null) }
     menuFor?.let { PlayOptionsMenu(vm, it, onDismiss = { menuFor = null }) }
     var jump by remember { mutableStateOf<JumpRequest?>(null) }
     val itemFocus = remember { FocusRequester() }
     val focusIndex = jump?.index ?: 0
-    val currentLabel by remember(state.anchors) { derivedStateOf { labelAtIndex(state.anchors, gridState.firstVisibleItemIndex) } }
+    val currentLabel by remember(state.anchors, headers) {
+        derivedStateOf { labelAtIndex(state.anchors, (gridState.firstVisibleItemIndex - headers).coerceAtLeast(0)) }
+    }
 
     LaunchedEffect(jump?.token) {
         val target = jump ?: return@LaunchedEffect
-        gridState.scrollToItem(target.index)
-        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.any { it.index == target.index } }.first { it }
+        gridState.scrollToItem(target.index + headers)
+        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.any { it.index == target.index + headers } }.first { it }
         withFrameNanos { }
         runCatching { itemFocus.requestFocus() }
     }
@@ -200,7 +252,7 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
     LaunchedEffect(followLetter) {
         val label = followLetter ?: return@LaunchedEffect
         delay(140)
-        gridState.scrollToItem(indexForLetter(state.anchors, label))
+        gridState.scrollToItem(indexForLetter(state.anchors, label) + headers)
     }
 
     // Deep in a long grid the only way back to the header is holding the D-pad through every row.
@@ -236,6 +288,13 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
                     } else false
                 },
         ) {
+            topRows.forEach { (title, items) ->
+                item(span = { GridItemSpan(maxLineSpan) }, key = "row:$title") {
+                    AlbumRow(vm, nav, title, items, hiResAlbums, onNearEnd = { last ->
+                        if (title == "Latest") vm.recentAlbums.ensureLoaded(last)
+                    })
+                }
+            }
             itemsIndexed(state.items, key = { _, it -> "${it.provider}:${it.itemId}" }) { index, item ->
                 val mod = Modifier
                     .onFocusChanged { if (it.isFocused) focusedIndex = index }
