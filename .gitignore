@@ -13,4 +13,4 @@ dist/
 *.p12
 .claude/
 FABLE_PROMPT.md
-graphify-out/
+.repowise/
