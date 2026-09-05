@@ -32,6 +32,15 @@ class MainActivity : ComponentActivity() {
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN && event.keyCode in dpadKeys) io.github.superthom196.matv.ui.DpadTracker.stamp()
+        // Volume first, and repeats included so holding the rocker ramps. Consuming these stops the
+        // Bravia's audio HAL from moving the TV's own speakers instead (it never consults the
+        // MediaSession's remote VolumeProvider, so intercepting here is the only thing that works).
+        if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                vm.nudgeVolume(if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP) 1 else -1)
+            }
+            return true
+        }
         if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_HEADSETHOOK -> { vm.playPause(); return true }

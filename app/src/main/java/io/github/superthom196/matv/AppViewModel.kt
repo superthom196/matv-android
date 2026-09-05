@@ -36,6 +36,12 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 
+/**
+ * Notches the TV remote's volume rocker takes to cross the hi-fi's whole 0-100 range.
+ * 25 means a full TV volume scale is 100% output, and each press moves 4 points.
+ */
+const val TV_VOLUME_STEPS = 25
+
 private const val TAG = "AppViewModel"
 
 /** Where the app is in its setup flow. Screens are driven from this. */
@@ -447,6 +453,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun volumeUp() = withPlayer { client.playerCmd("volume_up", it) }
     fun volumeDown() = withPlayer { client.playerCmd("volume_down", it) }
     fun setVolume(level: Int) = withPlayer { client.playerCmd("volume_set", it, "volume_level" to level.coerceIn(0, 100)) }
+
+    /**
+     * One notch of the TV remote's volume rocker. The hi-fi's 0-100 range is split into
+     * [TV_VOLUME_STEPS] notches, so a full TV scale is full output.
+     */
+    fun nudgeVolume(direction: Int) {
+        val current = _ui.value.selectedPlayer?.volumeLevel ?: return
+        val step = 100 / TV_VOLUME_STEPS
+        setVolume((current + direction * step).coerceIn(0, 100))
+    }
     fun shuffleOn() {
         val q = _ui.value.activeQueueId ?: return
         cmd { client.send("player_queues/shuffle", "queue_id" to q, "shuffle_enabled" to true) }
