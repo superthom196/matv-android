@@ -124,8 +124,6 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
                     onClick = { vm.toggleFavourite(item) }, size = 48.dp,
                 )
             }
-            VSpace(12.dp)
-            Text("on ${ui.selectedPlayer?.name ?: "— choose a player —"}", style = MaterialTheme.typography.bodySmall, color = HiFiColors.Muted)
         }
         HSpace(28.dp)
         // Right: children
