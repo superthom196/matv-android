@@ -7,18 +7,36 @@ plays on your existing Music Assistant endpoints.
 
 ## Install
 
-Grab `app-release.apk` from the [latest release](https://github.com/superthom196/matv-android/releases/latest)
-and side-load it — no build required:
+This repo is private, so there is no public download link. Get `app-release.apk` one of
+two ways: from the [latest release](https://github.com/superthom196/matv-android/releases/latest)
+if you have access to this repo, or just ask Thom to send you the file.
+
+Requires Android TV / Google TV / Fire OS, API 28+. The APK is debug-signed (not
+Play-listed), so allow installs from unknown sources if your TV asks. Reinstalling a
+build signed by a different machine needs `adb uninstall io.github.superthom196.matv`
+first.
+
+### With a computer (any TV)
 
 ```bash
 adb connect <tv-ip>:5555
 adb install app-release.apk
 ```
 
-Requires Android TV / Google TV / Fire OS, API 28+. The APK is debug-signed (not
-Play-listed), so allow installs from unknown sources if your TV asks. Reinstalling a
-build signed by a different machine needs `adb uninstall io.github.superthom196.matv`
-first.
+### Without a computer (any TV)
+
+Install **Send files to TV** on both your phone and the TV — it is free on the Amazon
+Appstore and the Play Store. Put the APK on your phone, open the app on both ends, send
+from phone, receive on TV, then open the received file to install. No URL, no hosting, no
+computer, and it all stays on your LAN.
+
+This is the easy path to give a friend: send them the APK over Signal/WhatsApp/email,
+they save it to their phone, then push it to their TV with Send files to TV.
+
+If you would rather type a URL, **Downloader** (Amazon Appstore) installs from any direct
+link — but it cannot sign in to GitHub, so a private-repo release URL will fail with a
+404. It only works if you first put the APK somewhere reachable without a login, such as
+a Dropbox link ending in `?dl=1`.
 
 ### Fire TV / Firestick
 
@@ -28,21 +46,11 @@ or 6 (Stick 2nd gen, Cube 1st gen), which are below API 28, nor on Amazon's Vega
 devices such as the Fire TV Stick 4K Select — Vega is not Android and cannot install APKs
 at all.
 
-Turn on ADB first: **Settings -> My Fire TV -> About**, click your device name seven times
-to unlock Developer Options, then enable **ADB debugging** and **Apps from Unknown
-Sources**. After that the install is the same as any other TV:
-
-```bash
-adb connect <firestick-ip>:5555
-adb install app-release.apk
-```
-
-The Fire TV IP is under **Settings -> My Fire TV -> About -> Network**.
-
-No computer? Install [Downloader](https://www.amazon.com/dp/B00TSUGXKE) from the Amazon
-Appstore and give it the APK URL from the
-[latest release](https://github.com/superthom196/matv-android/releases/latest); it
-downloads and installs in one step.
+Fire OS hides both switches you need behind Developer Options. Go to **Settings -> My Fire
+TV -> About**, click your device name seven times, then back out one level to **Developer
+Options** and turn on **ADB debugging** and **Apps from Unknown Sources**. Only the second
+one matters if you are installing via Send files to TV; both matter for the adb route. The
+stick's IP is under **Settings -> My Fire TV -> About -> Network**.
 
 Fire remotes have no dedicated menu or colour keys, but everything here is D-pad, Back,
 Select and the media transport keys, all of which the Alexa Voice Remote sends. Long-press
