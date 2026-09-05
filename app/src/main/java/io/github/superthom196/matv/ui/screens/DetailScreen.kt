@@ -50,6 +50,7 @@ import io.github.superthom196.matv.ui.MainScreen
 import io.github.superthom196.matv.ui.MediaCard
 import io.github.superthom196.matv.ui.Nav
 import io.github.superthom196.matv.ui.PillButton
+import io.github.superthom196.matv.ui.RoundIconButton
 import io.github.superthom196.matv.ui.VSpace
 import io.github.superthom196.matv.ui.formatTime
 
@@ -83,19 +84,18 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
             VSpace(24.dp)
             val overrides by vm.favOverrides.collectAsStateWithLifecycle()
             val fav = overrides["${item.provider}:${item.itemId}"] ?: item.favorite
-            Row {
+            // Play carries the label; the rest are icon-only circles so the column reads as one row.
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 PillButton("Play", onClick = { vm.playItem(item) }, icon = Icons.Default.PlayArrow, primary = true, modifier = Modifier.focusRequester(playFocus))
-                HSpace(10.dp)
-                PillButton("Shuffle", onClick = { vm.playItem(item, option = "replace"); vm.shuffleOn() }, icon = Icons.Default.Shuffle)
+                RoundIconButton(Icons.Default.Shuffle, "Shuffle", onClick = { vm.playItem(item, option = "replace"); vm.shuffleOn() }, size = 48.dp)
+                RoundIconButton(Icons.Default.QueueMusic, "Play next", onClick = { vm.playItem(item, option = "next") }, size = 48.dp)
+                RoundIconButton(Icons.Default.PlaylistAdd, "Add to queue", onClick = { vm.playItem(item, option = "add") }, size = 48.dp)
+                RoundIconButton(
+                    if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    if (fav) "Remove from favourites" else "Add to favourites",
+                    onClick = { vm.toggleFavourite(item) }, size = 48.dp,
+                )
             }
-            VSpace(10.dp)
-            Row {
-                PillButton("Play next", onClick = { vm.playItem(item, option = "next") }, icon = Icons.Default.QueueMusic)
-                HSpace(10.dp)
-                PillButton("Add to queue", onClick = { vm.playItem(item, option = "add") }, icon = Icons.Default.PlaylistAdd)
-            }
-            VSpace(10.dp)
-            PillButton(if (fav) "Favourite" else "Add to favourites", onClick = { vm.toggleFavourite(item) }, icon = if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder)
             VSpace(12.dp)
             Text("on ${ui.selectedPlayer?.name ?: "— choose a player —"}", style = MaterialTheme.typography.bodySmall, color = HiFiColors.Muted)
         }
