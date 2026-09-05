@@ -51,6 +51,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.superthom196.matv.R
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -182,6 +187,24 @@ fun MediaCard(item: MediaItem, imageUrl: String?, onClick: () -> Unit, modifier:
             }
             if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 14.sp), color = HiFiColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = align, modifier = Modifier.fillMaxWidth())
         }
+    }
+}
+
+/**
+ * The app's wordmark: the Music Assistant house followed by "TV". The logo already reads MA, so
+ * spelling out "MATV" beside it would say it twice. One definition, used by the header, the splash
+ * and the connect screen.
+ */
+@Composable
+fun Wordmark(logoSize: Dp = 30.dp, fontSize: TextUnit = 30.sp, modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Image(painterResource(R.drawable.logo_ma), contentDescription = "MATV", modifier = Modifier.size(logoSize))
+        HSpace(logoSize * 0.23f)
+        Text(
+            "TV",
+            style = MaterialTheme.typography.headlineLarge.copy(fontSize = fontSize, fontWeight = FontWeight.Bold),
+            color = HiFiColors.Accent,
+        )
     }
 }
 

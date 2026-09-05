@@ -78,6 +78,7 @@ import io.github.superthom196.matv.ui.MainScreen
 import io.github.superthom196.matv.ui.MediaCard
 import io.github.superthom196.matv.ui.Nav
 import io.github.superthom196.matv.ui.VSpace
+import io.github.superthom196.matv.ui.Wordmark
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
@@ -104,10 +105,7 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
 
     Column(Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // The logo already reads "MA", so the wordmark only needs the TV.
-            Image(painterResource(R.drawable.logo_ma), contentDescription = "MATV", modifier = Modifier.size(30.dp))
-            HSpace(7.dp)
-            Text("TV", style = MaterialTheme.typography.headlineLarge.copy(fontSize = 30.sp, fontWeight = FontWeight.Bold), color = HiFiColors.Accent)
+            Wordmark()
             HSpace(12.dp)
             TabRow(selectedTabIndex = tab) {
                 tabs.forEachIndexed { i, (_, label) ->

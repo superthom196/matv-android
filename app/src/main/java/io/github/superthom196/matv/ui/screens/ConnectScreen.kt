@@ -25,6 +25,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import io.github.superthom196.matv.AppViewModel
@@ -37,12 +38,13 @@ import io.github.superthom196.matv.ui.SectionLabel
 import io.github.superthom196.matv.ui.StatusDot
 import io.github.superthom196.matv.ui.TvTextField
 import io.github.superthom196.matv.ui.VSpace
+import io.github.superthom196.matv.ui.Wordmark
 
 @Composable
 fun LoadingScreen(ui: UiState) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("MATV", style = MaterialTheme.typography.displayMedium, color = HiFiColors.Accent)
+            Wordmark(logoSize = 48.dp, fontSize = 48.sp)
             VSpace(16.dp)
             Text("Connecting to ${ui.baseUrl ?: "Music Assistant"}…", style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted)
         }
@@ -57,7 +59,7 @@ fun ConnectScreen(vm: AppViewModel, ui: UiState) {
 
     Row(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 32.dp)) {
         Column(Modifier.width(520.dp)) {
-            Text("MATV", style = MaterialTheme.typography.displayMedium, color = HiFiColors.Accent)
+            Wordmark(logoSize = 48.dp, fontSize = 48.sp)
             VSpace(8.dp)
             Text("A big-screen remote for Music Assistant.", style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted)
             VSpace(40.dp)
