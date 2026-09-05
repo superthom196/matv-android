@@ -100,5 +100,13 @@ class HiResIndex(
 
     companion object {
         fun key(item: MediaItem): String = "${item.provider}:${item.itemId}"
+
+        /**
+         * Whether to mark this tile. The media type has to be checked: artists and albums are both
+         * numbered from the `library` provider, so artist 311 and album 311 share a key and an
+         * artist would otherwise wear an album's badge.
+         */
+        fun marks(item: MediaItem, hiRes: Set<String>): Boolean =
+            item.mediaType == "album" && key(item) in hiRes
     }
 }

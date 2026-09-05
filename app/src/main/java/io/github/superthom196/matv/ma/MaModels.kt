@@ -107,8 +107,11 @@ data class MediaItem(
     val isHiResTrack: Boolean
         get() = providerMappings.orEmpty().any { pm ->
             val f = pm.audioFormat ?: return@any false
-            (f.bitDepth ?: 16) > 16 || (f.sampleRate ?: 44100) > 48000
+            isHiRes(f.bitDepth, f.sampleRate)
         }
+
+    /** The format of this item's own file, when a provider reported one. */
+    val audioFormat: AudioFormat? get() = providerMappings.orEmpty().firstNotNullOfOrNull { it.audioFormat }
     val isFolder: Boolean get() = mediaType == "folder"
     val thumb: MediaItemImage? get() = metadata?.images?.firstOrNull { it.type == "thumb" } ?: metadata?.images?.firstOrNull() ?: image
 }
@@ -183,6 +186,22 @@ data class StreamDetails(
     /** Music Assistant's own verdict: "hi_res", "lossless", "lossy". */
     val fidelity: String? get() = audioProcessing?.inputFidelity?.quality
 }
+
+/** "FLAC 24/44.1" — codec, bit depth and rate, skipping whatever the server did not tell us. */
+fun audioFormatLabel(codec: String?, bitDepth: Int?, sampleRateKhz: String?): String {
+    val numbers = when {
+        bitDepth != null && sampleRateKhz != null -> "$bitDepth/$sampleRateKhz"
+        sampleRateKhz != null -> "$sampleRateKhz kHz"
+        bitDepth != null -> "$bitDepth-bit"
+        else -> null
+    }
+    val name = codec?.uppercase()?.takeIf { it.isNotBlank() && it != "?" }
+    return listOfNotNull(name, numbers).joinToString(" ")
+}
+
+/** Better than CD: more than 16 bits, or faster than 48 kHz. */
+fun isHiRes(bitDepth: Int?, sampleRate: Int?): Boolean =
+    (bitDepth ?: 16) > 16 || (sampleRate ?: 44100) > 48000
 
 @Serializable
 data class ProviderMapping(

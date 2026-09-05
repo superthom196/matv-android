@@ -18,6 +18,7 @@ import io.github.superthom196.matv.ma.AppSettings
 import io.github.superthom196.matv.ma.Prefs
 import io.github.superthom196.matv.ma.SavedConfig
 import io.github.superthom196.matv.ma.ServerInfo
+import io.github.superthom196.matv.ma.audioFormatLabel
 import io.github.superthom196.matv.ma.maJson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -73,17 +74,7 @@ data class NowPlaying(
     val isHiRes: Boolean get() = fidelity == "hi_res"
 
     /** e.g. "FLAC 24/44.1" — blank when the server has not told us what it is streaming. */
-    val formatLabel: String
-        get() {
-            val depth = bitDepth?.let { "$it" }
-            val rate = sampleRateKhz
-            val bits = when {
-                depth != null && rate != null -> "$depth/$rate"
-                rate != null -> "$rate kHz"
-                else -> null
-            }
-            return listOfNotNull(codec.uppercase().takeIf { it.isNotBlank() && it != "?" }, bits).joinToString(" ")
-        }
+    val formatLabel: String get() = audioFormatLabel(codec, bitDepth, sampleRateKhz)
 }
 
 data class UiState(

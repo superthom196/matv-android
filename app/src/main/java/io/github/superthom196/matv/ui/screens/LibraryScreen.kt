@@ -234,7 +234,7 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
                     .then(if (index == focusIndex) Modifier.focusRequester(itemFocus) else Modifier)
                 val own = vm.imageUrl(item, 256)
                 val url = if (own == null && round) vm.artistCover(item, 256).collectAsStateWithLifecycle().value else own
-                MediaCard(item, url, onClick = { openOrPlay(vm, nav, item) }, modifier = mod, round = round, onLongClick = { menuFor = item }, hiRes = HiResIndex.key(item) in hiResAlbums)
+                MediaCard(item, url, onClick = { openOrPlay(vm, nav, item) }, modifier = mod, round = round, onLongClick = { menuFor = item }, hiRes = HiResIndex.marks(item, hiResAlbums))
             }
         }
     }

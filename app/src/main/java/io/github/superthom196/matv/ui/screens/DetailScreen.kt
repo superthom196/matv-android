@@ -45,6 +45,9 @@ import io.github.superthom196.matv.UiState
 import io.github.superthom196.matv.ma.MediaItem
 import io.github.superthom196.matv.ui.Artwork
 import io.github.superthom196.matv.ui.FocusSurface
+import io.github.superthom196.matv.ma.audioFormatLabel
+import io.github.superthom196.matv.ma.isHiRes
+import io.github.superthom196.matv.ui.HiResBadge
 import io.github.superthom196.matv.ui.HSpace
 import io.github.superthom196.matv.ui.HiFiColors
 import io.github.superthom196.matv.ui.MainScreen
@@ -83,6 +86,29 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
             }
             if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted, maxLines = 2)
             children?.let { Text("${it.size} ${if (item.mediaType == "artist") "albums" else "tracks"}", style = MaterialTheme.typography.bodySmall, color = HiFiColors.Muted) }
+            // What this album actually is, read off the tracks already loaded for the list below —
+            // the album's own audio_format is a placeholder, so the tracks are the only honest source.
+            val formats = children.orEmpty().mapNotNull { it.audioFormat }
+            if (item.mediaType != "artist" && formats.isNotEmpty()) {
+                val depth = formats.mapNotNull { it.bitDepth }.maxOrNull()
+                val rate = formats.mapNotNull { it.sampleRate }.maxOrNull()
+                val codec = formats.firstNotNullOfOrNull { f -> f.contentType.takeIf { it.isNotBlank() && it != "?" } }
+                val khz = rate?.let { r ->
+                    val k = r / 1000.0
+                    if (k == k.toInt().toDouble()) k.toInt().toString() else String.format("%.1f", k)
+                }
+                val label = audioFormatLabel(codec, depth, khz)
+                if (label.isNotBlank()) {
+                    VSpace(6.dp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isHiRes(depth, rate)) {
+                            HiResBadge()
+                            HSpace(8.dp)
+                        }
+                        Text(label, style = MaterialTheme.typography.bodySmall, color = HiFiColors.Muted)
+                    }
+                }
+            }
             VSpace(24.dp)
             val overrides by vm.favOverrides.collectAsStateWithLifecycle()
             val fav = overrides["${item.provider}:${item.itemId}"] ?: item.favorite
@@ -113,7 +139,7 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
                     contentPadding = PaddingValues(top = 4.dp, bottom = 48.dp), modifier = Modifier.fillMaxSize().focusRestorer(),
                 ) {
                     items(children!!, key = { "${it.provider}:${it.itemId}" }) { album ->
-                        MediaCard(album, vm.imageUrl(album, 256), onClick = { nav.push(MainScreen.Detail(album)) }, hiRes = HiResIndex.key(album) in hiResAlbums)
+                        MediaCard(album, vm.imageUrl(album, 256), onClick = { nav.push(MainScreen.Detail(album)) }, hiRes = HiResIndex.marks(album, hiResAlbums))
                     }
                 }
                 else -> LazyColumn(contentPadding = PaddingValues(top = 4.dp, bottom = 48.dp), verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxSize().focusRestorer()) {
