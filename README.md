@@ -15,9 +15,38 @@ adb connect <tv-ip>:5555
 adb install app-release.apk
 ```
 
-Requires Android TV / Google TV, API 28+. The APK is debug-signed (not Play-listed),
-so allow installs from unknown sources if your TV asks. Reinstalling a build signed
-by a different machine needs `adb uninstall io.github.superthom196.matv` first.
+Requires Android TV / Google TV / Fire OS, API 28+. The APK is debug-signed (not
+Play-listed), so allow installs from unknown sources if your TV asks. Reinstalling a
+build signed by a different machine needs `adb uninstall io.github.superthom196.matv`
+first.
+
+### Fire TV / Firestick
+
+Works on Android-based Fire TV hardware — Fire OS 7 and 8, which covers the Stick 4K,
+Stick 4K Max, Stick 3rd gen, and Cube 2nd gen and later. It does **not** run on Fire OS 5
+or 6 (Stick 2nd gen, Cube 1st gen), which are below API 28, nor on Amazon's Vega OS
+devices such as the Fire TV Stick 4K Select — Vega is not Android and cannot install APKs
+at all.
+
+Turn on ADB first: **Settings -> My Fire TV -> About**, click your device name seven times
+to unlock Developer Options, then enable **ADB debugging** and **Apps from Unknown
+Sources**. After that the install is the same as any other TV:
+
+```bash
+adb connect <firestick-ip>:5555
+adb install app-release.apk
+```
+
+The Fire TV IP is under **Settings -> My Fire TV -> About -> Network**.
+
+No computer? Install [Downloader](https://www.amazon.com/dp/B00TSUGXKE) from the Amazon
+Appstore and give it the APK URL from the
+[latest release](https://github.com/superthom196/matv-android/releases/latest); it
+downloads and installs in one step.
+
+Fire remotes have no dedicated menu or colour keys, but everything here is D-pad, Back,
+Select and the media transport keys, all of which the Alexa Voice Remote sends. Long-press
+Select still opens the play options.
 
 ## Build from source
 
