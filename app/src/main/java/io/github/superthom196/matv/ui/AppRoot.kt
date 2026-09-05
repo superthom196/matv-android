@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.focusRequester
 import kotlinx.coroutines.delay
@@ -109,17 +110,30 @@ private fun MainFlow(vm: AppViewModel) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val nav = remember { Nav(if (ui.selectedPlayerId == null) MainScreen.Players else MainScreen.Library) }
     BackHandler(enabled = nav.stack.size > 1) { nav.pop() }
-    when (val s = nav.current) {
-        MainScreen.Library -> LibraryScreen(vm, ui, nav)
-        MainScreen.Players -> PlayersScreen(vm, ui, onDone = {
-            if (nav.stack.size > 1) nav.pop() else nav.replaceRoot(MainScreen.Library)
-        })
-        MainScreen.NowPlaying -> NowPlayingScreen(vm, ui, nav)
-        MainScreen.Queue -> QueueScreen(vm, ui, nav)
-        MainScreen.Search -> SearchScreen(vm, ui, nav)
-        MainScreen.Settings -> SettingsScreen(vm, ui, nav)
-        is MainScreen.Detail -> DetailScreen(vm, ui, nav, s.item)
+    // Screens are swapped, not stacked, so a screen leaving composition would lose every
+    // rememberSaveable it owns — which sent you back to the default tab, and to the top of the
+    // grid, every time you backed out of an album. Holding the state per screen keeps your place.
+    val stateHolder = rememberSaveableStateHolder()
+    val s = nav.current
+    stateHolder.SaveableStateProvider(screenKey(s)) {
+        when (s) {
+            MainScreen.Library -> LibraryScreen(vm, ui, nav)
+            MainScreen.Players -> PlayersScreen(vm, ui, onDone = {
+                if (nav.stack.size > 1) nav.pop() else nav.replaceRoot(MainScreen.Library)
+            })
+            MainScreen.NowPlaying -> NowPlayingScreen(vm, ui, nav)
+            MainScreen.Queue -> QueueScreen(vm, ui, nav)
+            MainScreen.Search -> SearchScreen(vm, ui, nav)
+            MainScreen.Settings -> SettingsScreen(vm, ui, nav)
+            is MainScreen.Detail -> DetailScreen(vm, ui, nav, s.item)
+        }
     }
+}
+
+/** Stable identity for one screen's saved state; each album keeps its own. */
+private fun screenKey(s: MainScreen): String = when (s) {
+    is MainScreen.Detail -> "detail:${s.item.uri ?: "${s.item.provider}:${s.item.itemId}"}"
+    else -> s::class.simpleName ?: "screen"
 }
 
 
