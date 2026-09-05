@@ -75,17 +75,10 @@ import io.github.superthom196.matv.ui.VSpace
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
-private val baseTabs = listOf("artists" to "Artists", "albums" to "Albums", "folders" to "Folders", "favourites" to "Favourites")
-
 @Composable
 fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
     val settings by vm.settings.collectAsStateWithLifecycle()
-    val tabs = remember(settings) {
-        baseTabs + listOfNotNull(
-            if (settings.showPlaylists) "playlists" to "Playlists" else null,
-            if (settings.showRadio) "radio" to "Radio" else null,
-        )
-    }
+    val tabs = remember(settings) { settings.tabs }
     var tab by rememberSaveable { mutableIntStateOf(tabs.indexOfFirst { it.first == settings.defaultTab }.coerceAtLeast(0)) }
     if (tab >= tabs.size) tab = 0
     val kind = tabs[tab].first

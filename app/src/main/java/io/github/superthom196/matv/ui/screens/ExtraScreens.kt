@@ -40,6 +40,7 @@ import io.github.superthom196.matv.HiResIndex
 import io.github.superthom196.matv.BuildConfig
 import io.github.superthom196.matv.UiState
 import io.github.superthom196.matv.ma.MIN_SCHEMA_VERSION
+import io.github.superthom196.matv.ma.AppSettings
 import io.github.superthom196.matv.ma.MediaItem
 import io.github.superthom196.matv.ui.FocusSurface
 import io.github.superthom196.matv.ui.HSpace
@@ -143,7 +144,7 @@ fun SettingsScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
             if (synced) add(MenuAction("Unsync", danger = true) { vm.ungroupPlayer(p.playerId) })
         }, onDismiss = { menuFor = null })
     }
-    val tabNames = listOf("artists" to "Artists", "albums" to "Albums", "folders" to "Folders", "favourites" to "Favourites")
+
     val players = ui.selectablePlayers
     Column(Modifier.fillMaxSize().padding(start = 28.dp, end = 28.dp, top = 20.dp)) {
         Text("Settings", style = MaterialTheme.typography.headlineMedium)
@@ -177,11 +178,35 @@ fun SettingsScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
             Text("OK selects a player. Long-press to sync it with the selected one.", style = MaterialTheme.typography.bodySmall, color = HiFiColors.Muted)
             VSpace(10.dp)
             SectionLabel("Library")
-            SettingRow("Open on", tabNames.firstOrNull { it.first == s.defaultTab }?.second ?: "Artists") {
-                val i = tabNames.indexOfFirst { it.first == s.defaultTab }; vm.updateSettings { it.copy(defaultTab = tabNames[(i + 1) % tabNames.size].first) }
+            // "Open on" only cycles through tabs that are actually showing.
+            val shown = s.tabs
+            SettingRow("Open on", shown.firstOrNull { it.first == s.defaultTab }?.second ?: shown.first().second) {
+                val i = shown.indexOfFirst { it.first == s.defaultTab }
+                vm.updateSettings { it.copy(defaultTab = shown[(i + 1) % shown.size].first) }
             }
-            SettingRow("Playlists tab", if (s.showPlaylists) "On" else "Off") { vm.updateSettings { it.copy(showPlaylists = !it.showPlaylists) } }
-            SettingRow("Radio tab", if (s.showRadio) "On" else "Off") { vm.updateSettings { it.copy(showRadio = !it.showRadio) } }
+            // One tab has to survive, or the header would be empty with nothing to browse.
+            fun toggleTab(on: Boolean, label: String, apply: (AppSettings) -> AppSettings) {
+                if (on && shown.size == 1) { vm.flash("$label is the only tab left"); return }
+                vm.updateSettings(apply)
+            }
+            SettingRow("Artists tab", if (s.showArtists) "On" else "Off") {
+                toggleTab(s.showArtists, "Artists") { it.copy(showArtists = !it.showArtists) }
+            }
+            SettingRow("Albums tab", if (s.showAlbums) "On" else "Off") {
+                toggleTab(s.showAlbums, "Albums") { it.copy(showAlbums = !it.showAlbums) }
+            }
+            SettingRow("Folders tab", if (s.showFolders) "On" else "Off") {
+                toggleTab(s.showFolders, "Folders") { it.copy(showFolders = !it.showFolders) }
+            }
+            SettingRow("Favourites tab", if (s.showFavourites) "On" else "Off") {
+                toggleTab(s.showFavourites, "Favourites") { it.copy(showFavourites = !it.showFavourites) }
+            }
+            SettingRow("Playlists tab", if (s.showPlaylists) "On" else "Off") {
+                toggleTab(s.showPlaylists, "Playlists") { it.copy(showPlaylists = !it.showPlaylists) }
+            }
+            SettingRow("Radio tab", if (s.showRadio) "On" else "Off") {
+                toggleTab(s.showRadio, "Radio") { it.copy(showRadio = !it.showRadio) }
+            }
             VSpace(10.dp)
             SectionLabel("Server")
             SettingRow("Server", "${ui.server?.name ?: ""}  ·  ${ui.baseUrl ?: ""}") { }

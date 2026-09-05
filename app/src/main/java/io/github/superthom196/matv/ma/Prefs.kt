@@ -28,13 +28,35 @@ data class SavedConfig(
 /** User-facing settings (Settings screen). */
 data class AppSettings(
     val defaultTab: String = "artists",
+    val showArtists: Boolean = true,
+    val showAlbums: Boolean = true,
+    val showFolders: Boolean = true,
+    val showFavourites: Boolean = true,
     val showPlaylists: Boolean = false,
     val showRadio: Boolean = false,
-)
+) {
+    /**
+     * The tabs to show, in header order. Never empty: turning the last one off would leave nothing
+     * to browse, so Artists comes back rather than stranding the user on a blank screen.
+     */
+    val tabs: List<Pair<String, String>>
+        get() = listOfNotNull(
+            if (showArtists) "artists" to "Artists" else null,
+            if (showAlbums) "albums" to "Albums" else null,
+            if (showFolders) "folders" to "Folders" else null,
+            if (showFavourites) "favourites" to "Favourites" else null,
+            if (showPlaylists) "playlists" to "Playlists" else null,
+            if (showRadio) "radio" to "Radio" else null,
+        ).ifEmpty { listOf("artists" to "Artists") }
+}
 
 class Prefs(private val context: Context) {
     private object K {
         val defaultTab = stringPreferencesKey("default_tab")
+        val showArtists = booleanPreferencesKey("show_artists")
+        val showAlbums = booleanPreferencesKey("show_albums")
+        val showFolders = booleanPreferencesKey("show_folders")
+        val showFavourites = booleanPreferencesKey("show_favourites")
         val showPlaylists = booleanPreferencesKey("show_playlists")
         val showRadio = booleanPreferencesKey("show_radio")
         val baseUrl = stringPreferencesKey("base_url")
@@ -63,11 +85,24 @@ class Prefs(private val context: Context) {
     suspend fun current(): SavedConfig = config.first()
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
-        AppSettings(p[K.defaultTab] ?: "artists", p[K.showPlaylists] ?: false, p[K.showRadio] ?: false)
+        AppSettings(
+            defaultTab = p[K.defaultTab] ?: "artists",
+            showArtists = p[K.showArtists] ?: true,
+            showAlbums = p[K.showAlbums] ?: true,
+            showFolders = p[K.showFolders] ?: true,
+            showFavourites = p[K.showFavourites] ?: true,
+            showPlaylists = p[K.showPlaylists] ?: false,
+            showRadio = p[K.showRadio] ?: false,
+        )
     }
 
     suspend fun saveSettings(s: AppSettings) {
-        context.dataStore.edit { it[K.defaultTab] = s.defaultTab; it[K.showPlaylists] = s.showPlaylists; it[K.showRadio] = s.showRadio }
+        context.dataStore.edit {
+            it[K.defaultTab] = s.defaultTab
+            it[K.showArtists] = s.showArtists; it[K.showAlbums] = s.showAlbums
+            it[K.showFolders] = s.showFolders; it[K.showFavourites] = s.showFavourites
+            it[K.showPlaylists] = s.showPlaylists; it[K.showRadio] = s.showRadio
+        }
     }
 
     suspend fun saveServer(baseUrl: String, token: String, serverId: String, serverName: String?, username: String) {
