@@ -102,23 +102,23 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
     val tabFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { tabFocus.requestFocus() } }
 
-    Column(Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, top = 14.dp)) {
+    Column(Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("MATV", style = MaterialTheme.typography.headlineLarge.copy(fontSize = 34.sp, fontWeight = FontWeight.Bold), color = HiFiColors.Accent)
-            HSpace(18.dp)
+            Text("MATV", style = MaterialTheme.typography.headlineLarge.copy(fontSize = 30.sp, fontWeight = FontWeight.Bold), color = HiFiColors.Accent)
+            HSpace(12.dp)
             TabRow(selectedTabIndex = tab) {
                 tabs.forEachIndexed { i, (_, label) ->
                     Tab(selected = i == tab, onFocus = { if (DpadTracker.userNavigatedRecently()) tab = i }, onClick = { tab = i },
                         modifier = if (i == tab) Modifier.focusRequester(tabFocus) else Modifier) {
-                        Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp))
+                        Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp))
                     }
                 }
             }
             Box(Modifier.weight(1f))
             IconChip(Icons.Default.Search, "Search", onClick = { nav.push(MainScreen.Search) })
-            HSpace(6.dp)
+            HSpace(4.dp)
             NowPlayingChip(ui, onClick = { nav.push(MainScreen.NowPlaying) })
-            HSpace(6.dp)
+            HSpace(4.dp)
             IconChip(Icons.Default.Settings, "Settings", onClick = { nav.push(MainScreen.Settings) })
         }
         VSpace(10.dp)
@@ -242,15 +242,15 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
 fun NowPlayingChip(ui: UiState, onClick: () -> Unit) {
     val np = ui.nowPlaying
     FocusSurface(onClick = onClick, shape = androidx.compose.foundation.shape.RoundedCornerShape(50)) {
-        Row(Modifier.padding(start = 6.dp, end = 16.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Artwork(np.imageUrl, Modifier.size(36.dp), corner = 50.dp)
-            HSpace(12.dp)
+        Row(Modifier.padding(start = 5.dp, end = 12.dp, top = 5.dp, bottom = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+            Artwork(np.imageUrl, Modifier.size(34.dp), corner = 50.dp)
+            HSpace(8.dp)
             Icon(Icons.Default.PlayArrow, null, tint = if (np.isPlaying) HiFiColors.Good else HiFiColors.Muted, modifier = Modifier.size(22.dp))
             HSpace(6.dp)
             Text(
                 if (np.hasMedia) np.title else "Now playing",
                 style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 200.dp),
+                modifier = Modifier.widthIn(max = 150.dp),
             )
         }
     }

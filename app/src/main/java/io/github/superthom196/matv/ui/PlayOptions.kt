@@ -18,7 +18,14 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -43,9 +50,20 @@ data class MenuAction(val label: String, val icon: ImageVector? = null, val dang
 fun ActionMenu(title: String, subtitle: String? = null, actions: List<MenuAction>, onDismiss: () -> Unit) {
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    // The menu opens on the long-press *down*; the matching key-up would otherwise click the first
+    // row. Swallow OK/Enter key-ups until a fresh key-down has been seen inside the menu.
+    var armed by remember { mutableStateOf(false) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
-            Modifier.width(420.dp).background(HiFiColors.Surface, RoundedCornerShape(18.dp)).padding(20.dp),
+            Modifier
+                .width(420.dp)
+                .onPreviewKeyEvent { ev ->
+                    if (armed) return@onPreviewKeyEvent false
+                    if (ev.type == KeyEventType.KeyDown) { armed = true; false }
+                    else if (ev.key == Key.DirectionCenter || ev.key == Key.Enter || ev.key == Key.NumPadEnter) { armed = true; true }
+                    else false
+                }
+                .background(HiFiColors.Surface, RoundedCornerShape(18.dp)).padding(20.dp),
         ) {
             Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (!subtitle.isNullOrBlank()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = HiFiColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
