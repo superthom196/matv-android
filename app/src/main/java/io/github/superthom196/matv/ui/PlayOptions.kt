@@ -40,6 +40,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import io.github.superthom196.matv.AppViewModel
+import kotlinx.coroutines.delay
 import io.github.superthom196.matv.ma.MediaItem
 
 /** A row in a small action menu. */
@@ -53,6 +54,11 @@ fun ActionMenu(title: String, subtitle: String? = null, actions: List<MenuAction
     // The menu opens on the long-press *down*; the matching key-up would otherwise click the first
     // row. Swallow OK/Enter key-ups until a fresh key-down has been seen inside the menu.
     var armed by remember { mutableStateOf(false) }
+    // That guard only sees the key-up if the dialog already holds focus. Release OK soon after the
+    // menu appears and the up is routed before that happens, which picked a row on its own. So also
+    // ignore any pick made in the first moments — far quicker than a person choosing one.
+    var ready by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(350); ready = true }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             Modifier
@@ -70,7 +76,7 @@ fun ActionMenu(title: String, subtitle: String? = null, actions: List<MenuAction
             VSpace(12.dp)
             actions.forEachIndexed { i, a ->
                 FocusSurface(
-                    onClick = { onDismiss(); a.onPick() },
+                    onClick = { if (ready) { onDismiss(); a.onPick() } },
                     modifier = (if (i == 0) Modifier.focusRequester(first) else Modifier).fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp), container = HiFiColors.Surface, scale = 1.0f,
                 ) {
