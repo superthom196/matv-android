@@ -28,6 +28,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.focus.FocusRequester
@@ -121,11 +124,11 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
             return@Column
         }
         when (kind) {
-            "albums" -> IndexedGrid(vm, nav, vm.albums, columns = 6, round = false, loadingText = "Sorting your albums by artist…")
-            "playlists" -> IndexedGrid(vm, nav, vm.playlists, columns = 6, round = false, loadingText = "Loading playlists…")
-            "radio" -> IndexedGrid(vm, nav, vm.radios, columns = 6, round = false, loadingText = "Loading radio stations…")
+            "albums" -> IndexedGrid(vm, nav, vm.albums, columns = 6, round = false, loadingText = "Sorting your albums by artist…", onBackToTop = { runCatching { tabFocus.requestFocus() } })
+            "playlists" -> IndexedGrid(vm, nav, vm.playlists, columns = 6, round = false, loadingText = "Loading playlists…", onBackToTop = { runCatching { tabFocus.requestFocus() } })
+            "radio" -> IndexedGrid(vm, nav, vm.radios, columns = 6, round = false, loadingText = "Loading radio stations…", onBackToTop = { runCatching { tabFocus.requestFocus() } })
             "favourites" -> FavouritesTab(vm, nav)
-            else -> IndexedGrid(vm, nav, vm.artists, columns = 7, round = true, loadingText = "Sorting your artists…")
+            else -> IndexedGrid(vm, nav, vm.artists, columns = 7, round = true, loadingText = "Sorting your artists…", onBackToTop = { runCatching { tabFocus.requestFocus() } })
         }
     }
 }
@@ -148,7 +151,7 @@ private data class JumpRequest(val index: Int, val token: Long)
 
 /** Artists and Albums share this: the whole library loaded once, sorted, with the A-Z rail on the left. */
 @Composable
-private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: Int, round: Boolean, loadingText: String) {
+private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: Int, round: Boolean, loadingText: String, onBackToTop: () -> Unit) {
     val state by index.state.collectAsStateWithLifecycle()
     val hiResAlbums by vm.hiRes.hiRes.collectAsStateWithLifecycle()
 
@@ -194,6 +197,14 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
         val label = followLetter ?: return@LaunchedEffect
         delay(140)
         gridState.scrollToItem(indexForLetter(state.anchors, label))
+    }
+
+    // Deep in a long grid the only way back to the header is holding the D-pad through every row.
+    // Back jumps there instead — and only while scrolled down, so at the top it still leaves the app.
+    val scope = rememberCoroutineScope()
+    BackHandler(enabled = gridState.firstVisibleItemIndex > 0) {
+        scope.launch { gridState.scrollToItem(0) }
+        onBackToTop()
     }
 
     Row(Modifier.fillMaxSize()) {
