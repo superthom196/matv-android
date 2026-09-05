@@ -58,6 +58,7 @@ import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
 import io.github.superthom196.matv.AlbumIndex
 import io.github.superthom196.matv.AppViewModel
+import io.github.superthom196.matv.HiResIndex
 import io.github.superthom196.matv.UiState
 import io.github.superthom196.matv.indexForLetter
 import io.github.superthom196.matv.labelAtIndex
@@ -156,6 +157,7 @@ private data class JumpRequest(val index: Int, val token: Long)
 @Composable
 private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: Int, round: Boolean, loadingText: String) {
     val state by index.state.collectAsStateWithLifecycle()
+    val hiResAlbums by vm.hiRes.hiRes.collectAsStateWithLifecycle()
 
     if (!state.ready) {
         Column(Modifier.fillMaxSize()) {
@@ -232,7 +234,7 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
                     .then(if (index == focusIndex) Modifier.focusRequester(itemFocus) else Modifier)
                 val own = vm.imageUrl(item, 256)
                 val url = if (own == null && round) vm.artistCover(item, 256).collectAsStateWithLifecycle().value else own
-                MediaCard(item, url, onClick = { openOrPlay(vm, nav, item) }, modifier = mod, round = round, onLongClick = { menuFor = item })
+                MediaCard(item, url, onClick = { openOrPlay(vm, nav, item) }, modifier = mod, round = round, onLongClick = { menuFor = item }, hiRes = HiResIndex.key(item) in hiResAlbums)
             }
         }
     }

@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -42,6 +43,17 @@ class Prefs(private val context: Context) {
         val serverName = stringPreferencesKey("server_name")
         val username = stringPreferencesKey("username")
         val playerId = stringPreferencesKey("player_id")
+        // Hi-res verdicts, cached so the album scan runs once rather than on every launch.
+        val hiResAlbums = stringSetPreferencesKey("hires_albums")
+        val hiResChecked = stringSetPreferencesKey("hires_checked")
+    }
+
+    suspend fun hiResAlbums(): Set<String> = context.dataStore.data.first()[K.hiResAlbums].orEmpty()
+
+    suspend fun hiResChecked(): Set<String> = context.dataStore.data.first()[K.hiResChecked].orEmpty()
+
+    suspend fun saveHiRes(hiRes: Set<String>, checked: Set<String>) {
+        context.dataStore.edit { it[K.hiResAlbums] = hiRes; it[K.hiResChecked] = checked }
     }
 
     val config: Flow<SavedConfig> = context.dataStore.data.map { p ->

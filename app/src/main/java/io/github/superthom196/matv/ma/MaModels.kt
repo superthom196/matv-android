@@ -96,8 +96,19 @@ data class MediaItem(
     // browse folder (music/browse): `path` is what you pass back to browse into it
     val path: String? = null,
     val image: MediaItemImage? = null,
+    @SerialName("provider_mappings") val providerMappings: List<ProviderMapping>? = null,
 ) {
     val artistLine: String get() = artists?.joinToString(", ") { it.name }.orEmpty()
+
+    /**
+     * Better than CD off the source file. Only meaningful on tracks: an album's own mapping carries
+     * an unfilled placeholder (content_type "?", 16/44.1), so albums must be judged by their tracks.
+     */
+    val isHiResTrack: Boolean
+        get() = providerMappings.orEmpty().any { pm ->
+            val f = pm.audioFormat ?: return@any false
+            (f.bitDepth ?: 16) > 16 || (f.sampleRate ?: 44100) > 48000
+        }
     val isFolder: Boolean get() = mediaType == "folder"
     val thumb: MediaItemImage? get() = metadata?.images?.firstOrNull { it.type == "thumb" } ?: metadata?.images?.firstOrNull() ?: image
 }
@@ -172,6 +183,14 @@ data class StreamDetails(
     /** Music Assistant's own verdict: "hi_res", "lossless", "lossy". */
     val fidelity: String? get() = audioProcessing?.inputFidelity?.quality
 }
+
+@Serializable
+data class ProviderMapping(
+    @SerialName("item_id") val itemId: String = "",
+    @SerialName("provider_domain") val providerDomain: String = "",
+    val available: Boolean = true,
+    @SerialName("audio_format") val audioFormat: AudioFormat? = null,
+)
 
 @Serializable
 data class AudioFormat(

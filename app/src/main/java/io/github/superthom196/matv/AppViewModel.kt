@@ -130,6 +130,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val playlists = AlbumIndex(viewModelScope, count = { client.libraryCount("playlists") }, fetch = { off, lim -> client.libraryItems("playlists", off, lim) }, sortKey = ::artistNameKey)
     val radios = AlbumIndex(viewModelScope, count = { client.libraryCount("radios") }, fetch = { off, lim -> client.libraryItems("radios", off, lim) }, sortKey = ::artistNameKey)
 
+    /** Hi-res verdicts per album, learned in the background and cached on disk. */
+    val hiRes = HiResIndex(viewModelScope, prefs, tracksOf = { client.albumTracks(it) })
+
+    init {
+        // Load the cached verdicts, then top up the scan whenever the album library finishes loading.
+        viewModelScope.launch {
+            hiRes.restore()
+            albums.state.collect { st -> if (st.ready) hiRes.ensureScanned(st.items) }
+        }
+    }
+
     val settings: StateFlow<AppSettings> = prefs.settings.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
     fun updateSettings(transform: (AppSettings) -> AppSettings) { viewModelScope.launch { prefs.saveSettings(transform(settings.value)) } }
 

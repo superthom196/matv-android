@@ -16,6 +16,8 @@ object HiFiColors {
     val Surface = Color(0xFF232323)      // Music Assistant panel
     val SurfaceHigh = Color(0xFF2E2E2E)
     val Accent = Color(0xFF03A9F4)       // Music Assistant primary
+    /** Gold, used only for the hi-res mark so it reads as a quality flag, not another accent. */
+    val HiRes = Color(0xFFE8B33C)
     val AccentBright = Color(0xFF4FC3F7)
     val OnAccent = Color(0xFF00202E)
     val Text = Color(0xFFF5F5F5)

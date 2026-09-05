@@ -46,6 +46,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -161,13 +162,16 @@ fun Artwork(url: String?, modifier: Modifier = Modifier, corner: androidx.compos
 
 /** Library grid tile: artwork, name, subtitle. */
 @Composable
-fun MediaCard(item: MediaItem, imageUrl: String?, onClick: () -> Unit, modifier: Modifier = Modifier, round: Boolean = false, onLongClick: (() -> Unit)? = null) {
+fun MediaCard(item: MediaItem, imageUrl: String?, onClick: () -> Unit, modifier: Modifier = Modifier, round: Boolean = false, onLongClick: (() -> Unit)? = null, hiRes: Boolean = false) {
     FocusSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier, container = Color.Transparent, focusedContainer = HiFiColors.SurfaceHigh, scale = 1.05f) {
         // Square artwork fills the column, so its captions line up left. A circle is inset from the
         // column edges, which leaves left-aligned text looking detached from it — centre those.
         val align = if (round) TextAlign.Center else TextAlign.Start
         Column(Modifier.padding(7.dp)) {
-            Artwork(imageUrl, Modifier.fillMaxWidth().aspectRatio(1f), corner = if (round) 200.dp else 10.dp)
+            Box(Modifier.fillMaxWidth()) {
+                Artwork(imageUrl, Modifier.fillMaxWidth().aspectRatio(1f), corner = if (round) 200.dp else 10.dp)
+                if (hiRes) HiResBadge(Modifier.align(Alignment.TopEnd).padding(6.dp))
+            }
             Spacer(Modifier.height(6.dp))
             Text(item.name, style = MaterialTheme.typography.titleSmall.copy(fontSize = 12.sp, lineHeight = 15.sp), maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = align, modifier = Modifier.fillMaxWidth())
             val sub = when (item.mediaType) {
@@ -179,6 +183,19 @@ fun MediaCard(item: MediaItem, imageUrl: String?, onClick: () -> Unit, modifier:
             if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 14.sp), color = HiFiColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = align, modifier = Modifier.fillMaxWidth())
         }
     }
+}
+
+/** Gold "HR" corner mark: this album's tracks are better than CD off the source file. */
+@Composable
+fun HiResBadge(modifier: Modifier = Modifier) {
+    Text(
+        "HR",
+        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+        color = Color(0xFF3A2A00),
+        modifier = modifier
+            .background(HiFiColors.HiRes, RoundedCornerShape(4.dp))
+            .padding(horizontal = 5.dp, vertical = 1.dp),
+    )
 }
 
 /**
