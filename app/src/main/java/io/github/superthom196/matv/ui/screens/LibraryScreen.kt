@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -163,6 +164,9 @@ fun openOrPlay(vm: AppViewModel, nav: Nav, item: MediaItem) {
 private data class JumpRequest(val index: Int, val token: Long)
 
 /** Artists and Albums share this: the whole library loaded once, sorted, with the A-Z rail on the left. */
+/** Slack around the lazy containers so a focused card's ring is not clipped as it grows. */
+private val RING_ROOM = 8.dp
+
 /** Height of a shelf, so an empty one still reserves its place. */
 private val ROW_HEIGHT = 206.dp
 
@@ -180,22 +184,22 @@ private fun AlbumRow(
     val lastVisible by remember { derivedStateOf { rowState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 } }
     LaunchedEffect(lastVisible) { onNearEnd(lastVisible) }
     Column(Modifier.padding(bottom = 10.dp)) {
-        SectionLabel(title, Modifier.padding(start = 8.dp, bottom = 4.dp))
+        SectionLabel(title, Modifier.padding(bottom = 4.dp))
         if (items.isEmpty()) {
             // Hold the space, so the row above does not jump when this one arrives.
             Box(Modifier.fillMaxWidth().height(ROW_HEIGHT), contentAlignment = Alignment.CenterStart) {
-                Text("Loading…", style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted,
-                    modifier = Modifier.padding(start = 16.dp))
+                Text("Loading…", style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted)
             }
             return@Column
         }
         LazyRow(
             state = rowState,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            // Same reason as the grid: the focused card grows, and without room the first card's
-            // ring is sliced off against the row's own edge.
-            contentPadding = PaddingValues(horizontal = 8.dp),
-            modifier = Modifier.fillMaxWidth().focusRestorer(),
+            // These shelves live inside the grid, which already insets its items by RING_ROOM. Pad by
+            // the same amount and shift back by it: the cards line up with the album columns below,
+            // and the focused card still has room for its ring instead of being sliced off.
+            contentPadding = PaddingValues(horizontal = RING_ROOM),
+            modifier = Modifier.fillMaxWidth().offset(x = -RING_ROOM).focusRestorer(),
         ) {
             items(items, key = { "$title:${it.provider}:${it.itemId}" }) { item ->
                 MediaCard(
@@ -292,7 +296,7 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
             // The focused card grows 5%; without room on the left its ring is clipped by the rail.
-            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 48.dp, top = 6.dp),
+            contentPadding = PaddingValues(start = RING_ROOM, end = RING_ROOM, bottom = 48.dp, top = 6.dp),
             modifier = Modifier
                 .fillMaxSize()
                 .focusRestorer()

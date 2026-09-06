@@ -55,7 +55,7 @@ fun AlphabetRail(
 ) {
     val populated = remember(anchors) { anchors.map { it.label }.toSet() }
     val focusTarget = if (currentLabel in populated) currentLabel else anchors.firstOrNull()?.label
-    BoxWithConstraints(modifier.fillMaxHeight().width(36.dp)) {
+    BoxWithConstraints(modifier.fillMaxHeight().width(26.dp)) {
         val rowHeight = (maxHeight / alphabet.size).coerceIn(12.dp, 24.dp)
         Column(Modifier.fillMaxHeight(), verticalArrangement = Arrangement.Top) {
             alphabet.forEach { label ->
@@ -65,7 +65,7 @@ fun AlphabetRail(
                 Box(
                     Modifier
                         .height(rowHeight)
-                        .width(36.dp)
+                        .width(26.dp)
                         .then(if (currentFocus != null && label == focusTarget) Modifier.focusRequester(currentFocus) else Modifier)
                         .then(
                             if (isPopulated) Modifier
