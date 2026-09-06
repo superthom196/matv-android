@@ -17,14 +17,13 @@ Shot on a Sony BRAVIA at 1920x1080.
 
 ## Install
 
-This repo is private, so there is no public download link. Get `app-release.apk` one of
-two ways: from the [latest release](https://github.com/superthom196/matv-android/releases/latest)
-if you have access to this repo, or just ask Thom to send you the file.
+Download `app-release.apk` from the
+[latest release](https://github.com/superthom196/matv-android/releases/latest).
 
-Requires Android TV / Google TV / Fire OS, API 28+. The APK is debug-signed (not
-Play-listed), so allow installs from unknown sources if your TV asks. Reinstalling a
-build signed by a different machine needs `adb uninstall io.github.superthom196.matv`
-first.
+Requires Android TV / Google TV / Fire OS, API 28+. It is not on the Play Store, so allow
+installs from unknown sources if your TV asks. Upgrading from a build signed with a
+different key needs `adb uninstall io.github.superthom196.matv` first — that applies to
+anyone who has a pre-1.0 build.
 
 ### With a computer (any TV)
 
@@ -40,13 +39,11 @@ Appstore and the Play Store. Put the APK on your phone, open the app on both end
 from phone, receive on TV, then open the received file to install. No URL, no hosting, no
 computer, and it all stays on your LAN.
 
-This is the easy path to give a friend: send them the APK over Signal/WhatsApp/email,
-they save it to their phone, then push it to their TV with Send files to TV.
+It is also the easy path to pass the app to someone else: send them the APK over
+Signal/WhatsApp/email, they save it to their phone, then push it to their TV.
 
 If you would rather type a URL, **Downloader** (Amazon Appstore) installs from any direct
-link — but it cannot sign in to GitHub, so a private-repo release URL will fail with a
-404. It only works if you first put the APK somewhere reachable without a login, such as
-a Dropbox link ending in `?dl=1`.
+link, including the release asset above.
 
 ### Fire TV / Firestick
 
