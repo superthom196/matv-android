@@ -135,14 +135,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         client.libraryItems("albums", off, lim, orderBy = "timestamp_added_desc")
     }
 
-    /** Hi-res verdicts per album, learned in the background and cached on disk. */
-    val hiRes = HiResIndex(viewModelScope, prefs, tracksOf = { client.albumTracks(it) })
+    /** Hi-res and genre facts per album, learned in the background and cached on disk. */
+    val albumScan = AlbumScan(viewModelScope, prefs, tracksOf = { client.albumTracks(it) })
 
     init {
         // Load the cached verdicts, then top up the scan whenever the album library finishes loading.
         viewModelScope.launch {
-            hiRes.restore()
-            albums.state.collect { st -> if (st.ready) hiRes.ensureScanned(st.items) }
+            albumScan.restore()
+            albums.state.collect { st -> if (st.ready) albumScan.ensureScanned(st.items) }
         }
     }
 

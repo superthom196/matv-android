@@ -14,13 +14,17 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.sync.withLock
 
-private const val TAG = "HiResIndex"
+private const val TAG = "AlbumScan"
+
+/** Bump when the scan starts collecting something new, so one more pass runs over albums already seen. */
+private const val SCAN_VERSION = 2
 
 /** Albums checked so far, and how many are left to check. */
-data class HiResScan(val done: Int = 0, val total: Int = 0, val running: Boolean = false)
+data class ScanProgress(val done: Int = 0, val total: Int = 0, val running: Boolean = false)
 
 /**
- * Which albums are hi-res.
+ * The two things the server will not tell us about an album: whether it is hi-res, and what genres
+ * it carries. Both live only on the tracks, so both are learned on one pass and cached together.
  *
  * The server cannot answer this directly: a library album's own `audio_format` is an unfilled
  * placeholder that reports 16/44.1 for everything, and only its tracks carry the real numbers. So
@@ -28,7 +32,7 @@ data class HiResScan(val done: Int = 0, val total: Int = 0, val running: Boolean
  * answers are cached on disk and every album is asked about exactly once, so the cost is paid on
  * the first run and new albums trickle in after that.
  */
-class HiResIndex(
+class AlbumScan(
     private val scope: CoroutineScope,
     private val prefs: Prefs,
     private val tracksOf: suspend (MediaItem) -> List<MediaItem>,
@@ -36,8 +40,12 @@ class HiResIndex(
     private val _hiRes = MutableStateFlow<Set<String>>(emptySet())
     val hiRes: StateFlow<Set<String>> = _hiRes.asStateFlow()
 
-    private val _scan = MutableStateFlow(HiResScan())
-    val scan: StateFlow<HiResScan> = _scan.asStateFlow()
+    /** Album key -> the genres its tracks are tagged with, most common first. */
+    private val _genres = MutableStateFlow<Map<String, List<String>>>(emptyMap())
+    val genres: StateFlow<Map<String, List<String>>> = _genres.asStateFlow()
+
+    private val _scan = MutableStateFlow(ScanProgress())
+    val scan: StateFlow<ScanProgress> = _scan.asStateFlow()
 
     /** Every album already asked about, hi-res or not, so a second pass costs nothing. */
     private var checked: Set<String> = emptySet()
@@ -45,9 +53,16 @@ class HiResIndex(
     private var job: Job? = null
 
     suspend fun restore() {
+        // Everything was already "checked" for hi-res alone; a bump re-walks them to pick up genres.
+        if (prefs.scanVersion() < SCAN_VERSION) {
+            prefs.saveHiRes(prefs.hiResAlbums(), emptySet())
+            prefs.saveScanVersion(SCAN_VERSION)
+            Log.d(TAG, "scan version bumped; re-walking albums for genres")
+        }
         checked = prefs.hiResChecked()
         _hiRes.value = prefs.hiResAlbums()
-        Log.d(TAG, "restored ${_hiRes.value.size} hi-res of ${checked.size} checked")
+        _genres.value = prefs.albumGenres()
+        Log.d(TAG, "restored ${_hiRes.value.size} hi-res, ${_genres.value.size} tagged, ${checked.size} checked")
     }
 
     /** Ask about anything in [albums] not asked about before. Safe to call repeatedly. */
@@ -58,44 +73,57 @@ class HiResIndex(
         job = scope.launch {
             val gate = Semaphore(3)
             var done = 0
-            _scan.value = HiResScan(0, pending.size, running = true)
+            _scan.value = ScanProgress(0, pending.size, running = true)
             val foundHiRes = mutableSetOf<String>()
             val foundChecked = mutableSetOf<String>()
+            val foundGenres = mutableMapOf<String, List<String>>()
             pending.chunked(60).forEach { chunk ->
                 chunk.map { album ->
                     launch {
                         gate.withPermit {
                             val k = key(album)
-                            val hi = runCatching { tracksOf(album).any { it.isHiResTrack } }
+                            val tracks = runCatching { tracksOf(album) }
                                 .onFailure { Log.w(TAG, "tracks for ${album.name} failed: ${it.message}") }
                                 .getOrNull()
                             lock.withLock {
                                 // A failed lookup is left unchecked so a later pass retries it.
-                                if (hi != null) {
+                                if (tracks != null) {
                                     foundChecked += k
-                                    if (hi) foundHiRes += k
+                                    if (tracks.any { it.isHiResTrack }) foundHiRes += k
+                                    val g = tracks.flatMap { it.metadata?.genres.orEmpty() }
+                                        .mapNotNull { it.trim().takeIf(String::isNotBlank) }
+                                        .groupingBy { it }.eachCount()
+                                        .entries.sortedByDescending { e -> e.value }.map { e -> e.key }
+                                    if (g.isNotEmpty()) foundGenres[k] = g
                                 }
                                 done++
-                                _scan.value = HiResScan(done, pending.size, running = true)
+                                _scan.value = ScanProgress(done, pending.size, running = true)
                             }
                         }
                     }
                 }.forEach { it.join() }
                 // Persist as we go: a scan interrupted by a restart keeps what it learned.
-                lock.withLock { commit(foundHiRes, foundChecked) }
+                lock.withLock { commit(foundHiRes, foundChecked, foundGenres) }
             }
-            _scan.value = HiResScan(done, pending.size, running = false)
-            Log.d(TAG, "scan finished: ${_hiRes.value.size} hi-res of ${checked.size} checked")
+            _scan.value = ScanProgress(done, pending.size, running = false)
+            Log.d(TAG, "scan finished: ${_hiRes.value.size} hi-res, ${_genres.value.size} tagged, ${checked.size} checked")
         }
     }
 
-    private suspend fun commit(newHiRes: MutableSet<String>, newChecked: MutableSet<String>) {
+    private suspend fun commit(
+        newHiRes: MutableSet<String>,
+        newChecked: MutableSet<String>,
+        newGenres: MutableMap<String, List<String>>,
+    ) {
         if (newChecked.isEmpty()) return
         checked = checked + newChecked
         _hiRes.value = _hiRes.value + newHiRes
+        _genres.value = _genres.value + newGenres
         prefs.saveHiRes(_hiRes.value, checked)
+        prefs.saveAlbumGenres(_genres.value)
         newHiRes.clear()
         newChecked.clear()
+        newGenres.clear()
     }
 
     companion object {

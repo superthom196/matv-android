@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -71,11 +72,28 @@ class Prefs(private val context: Context) {
         // Hi-res verdicts, cached so the album scan runs once rather than on every launch.
         val hiResAlbums = stringSetPreferencesKey("hires_albums")
         val hiResChecked = stringSetPreferencesKey("hires_checked")
+        val albumGenres = stringPreferencesKey("album_genres")
+        val scanVersion = intPreferencesKey("scan_version")
     }
 
     suspend fun hiResAlbums(): Set<String> = context.dataStore.data.first()[K.hiResAlbums].orEmpty()
 
     suspend fun hiResChecked(): Set<String> = context.dataStore.data.first()[K.hiResChecked].orEmpty()
+
+    /** Album key -> genres, as JSON: genre names are free text, so no delimiter is safe. */
+    suspend fun albumGenres(): Map<String, List<String>> {
+        val raw = context.dataStore.data.first()[K.albumGenres] ?: return emptyMap()
+        return runCatching { maJson.decodeFromString<Map<String, List<String>>>(raw) }.getOrDefault(emptyMap())
+    }
+
+    suspend fun saveAlbumGenres(map: Map<String, List<String>>) {
+        val raw = maJson.encodeToString(map)
+        context.dataStore.edit { it[K.albumGenres] = raw }
+    }
+
+    suspend fun scanVersion(): Int = context.dataStore.data.first()[K.scanVersion] ?: 0
+
+    suspend fun saveScanVersion(v: Int) { context.dataStore.edit { it[K.scanVersion] = v } }
 
     suspend fun saveHiRes(hiRes: Set<String>, checked: Set<String>) {
         context.dataStore.edit { it[K.hiResAlbums] = hiRes; it[K.hiResChecked] = checked }

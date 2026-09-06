@@ -49,6 +49,8 @@ data class MediaItemImage(
 data class MediaItemMetadata(
     val images: List<MediaItemImage>? = null,
     val description: String? = null,
+    /** Only present on tracks fetched via album_tracks: the library list strips it, albums never have it. */
+    val genres: List<String>? = null,
 )
 
 /** Lightweight reference used inside other items (album.artists, track.album, ...). */

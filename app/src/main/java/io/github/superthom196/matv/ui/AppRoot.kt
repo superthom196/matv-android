@@ -39,6 +39,7 @@ import io.github.superthom196.matv.ui.screens.NowPlayingScreen
 import io.github.superthom196.matv.ui.screens.PlayersScreen
 import io.github.superthom196.matv.ui.screens.QueueScreen
 import io.github.superthom196.matv.ui.screens.SearchScreen
+import io.github.superthom196.matv.ui.screens.GenreAlbumsScreen
 import io.github.superthom196.matv.ui.screens.SettingsScreen
 
 /** Screens inside the connected app. A plain in-memory back stack; Back pops, exits at the root. */
@@ -50,6 +51,7 @@ sealed class MainScreen {
     data object Search : MainScreen()
     data object Settings : MainScreen()
     data class Detail(val item: MediaItem) : MainScreen()
+    data class Genre(val name: String) : MainScreen()
 }
 
 class Nav(initial: MainScreen) {
@@ -126,6 +128,7 @@ private fun MainFlow(vm: AppViewModel) {
             MainScreen.Search -> SearchScreen(vm, ui, nav)
             MainScreen.Settings -> SettingsScreen(vm, ui, nav)
             is MainScreen.Detail -> DetailScreen(vm, ui, nav, s.item)
+            is MainScreen.Genre -> GenreAlbumsScreen(vm, nav, s.name)
         }
     }
 }
@@ -133,6 +136,7 @@ private fun MainFlow(vm: AppViewModel) {
 /** Stable identity for one screen's saved state; each album keeps its own. */
 private fun screenKey(s: MainScreen): String = when (s) {
     is MainScreen.Detail -> "detail:${s.item.uri ?: "${s.item.provider}:${s.item.itemId}"}"
+    is MainScreen.Genre -> "genre:${s.name}"
     else -> s::class.simpleName ?: "screen"
 }
 

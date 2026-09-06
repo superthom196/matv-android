@@ -40,7 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import io.github.superthom196.matv.AppViewModel
-import io.github.superthom196.matv.HiResIndex
+import io.github.superthom196.matv.AlbumScan
 import io.github.superthom196.matv.UiState
 import io.github.superthom196.matv.ma.MediaItem
 import io.github.superthom196.matv.ui.Artwork
@@ -69,7 +69,7 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
     val playFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { playFocus.requestFocus() } }
     var menuFor by remember { mutableStateOf<MediaItem?>(null) }
-    val hiResAlbums by vm.hiRes.hiRes.collectAsStateWithLifecycle()
+    val hiResAlbums by vm.albumScan.hiRes.collectAsStateWithLifecycle()
     menuFor?.let { t -> PlayOptionsMenu(vm, t, onDismiss = { menuFor = null }, playNow = { vm.playItem(item, startFrom = t) }) }
 
     Row(Modifier.fillMaxSize().padding(start = 28.dp, end = 28.dp, top = 20.dp)) {
@@ -137,7 +137,7 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
                     contentPadding = PaddingValues(top = 4.dp, bottom = 48.dp), modifier = Modifier.fillMaxSize().focusRestorer(),
                 ) {
                     items(children!!, key = { "${it.provider}:${it.itemId}" }) { album ->
-                        MediaCard(album, vm.imageUrl(album, 256), onClick = { nav.push(MainScreen.Detail(album)) }, hiRes = HiResIndex.marks(album, hiResAlbums))
+                        MediaCard(album, vm.imageUrl(album, 256), onClick = { nav.push(MainScreen.Detail(album)) }, hiRes = AlbumScan.marks(album, hiResAlbums))
                     }
                 }
                 else -> LazyColumn(contentPadding = PaddingValues(top = 4.dp, bottom = 48.dp), verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxSize().focusRestorer()) {

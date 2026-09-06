@@ -36,7 +36,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import io.github.superthom196.matv.AppViewModel
-import io.github.superthom196.matv.HiResIndex
+import io.github.superthom196.matv.AlbumScan
 import io.github.superthom196.matv.BuildConfig
 import io.github.superthom196.matv.UiState
 import io.github.superthom196.matv.ma.MIN_SCHEMA_VERSION
@@ -59,7 +59,7 @@ import io.github.superthom196.matv.ui.VSpace
 fun SectionedGrid(vm: AppViewModel, nav: Nav, sections: List<Pair<String, List<MediaItem>>>, columns: Int = 6, emptyText: String) {
     var menuFor by remember { mutableStateOf<MediaItem?>(null) }
     menuFor?.let { PlayOptionsMenu(vm, it, onDismiss = { menuFor = null }) }
-    val hiResAlbums by vm.hiRes.hiRes.collectAsStateWithLifecycle()
+    val hiResAlbums by vm.albumScan.hiRes.collectAsStateWithLifecycle()
     val nonEmpty = sections.filter { it.second.isNotEmpty() }
     if (nonEmpty.isEmpty()) { Text(emptyText, style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted); return }
     LazyVerticalGrid(
@@ -73,7 +73,7 @@ fun SectionedGrid(vm: AppViewModel, nav: Nav, sections: List<Pair<String, List<M
                 val round = item.mediaType == "artist"
                 val own = vm.imageUrl(item, 256)
                 val url = if (own == null && round) vm.artistCover(item, 256).collectAsStateWithLifecycle().value else own
-                MediaCard(item, url, onClick = { openOrPlay(vm, nav, item) }, round = round, onLongClick = { menuFor = item }, hiRes = HiResIndex.marks(item, hiResAlbums))
+                MediaCard(item, url, onClick = { openOrPlay(vm, nav, item) }, round = round, onLongClick = { menuFor = item }, hiRes = AlbumScan.marks(item, hiResAlbums))
             }
         }
     }

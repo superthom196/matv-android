@@ -70,7 +70,7 @@ import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
 import io.github.superthom196.matv.AlbumIndex
 import io.github.superthom196.matv.AppViewModel
-import io.github.superthom196.matv.HiResIndex
+import io.github.superthom196.matv.AlbumScan
 import io.github.superthom196.matv.UiState
 import io.github.superthom196.matv.indexForLetter
 import io.github.superthom196.matv.labelAtIndex
@@ -100,7 +100,7 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
         when (kind) {
             "albums" -> vm.albums.ensureLoaded()
             "artists" -> vm.artists.ensureLoaded()
-            "genres" -> vm.genres.ensureLoaded()
+            "genres" -> { vm.genres.ensureLoaded(); vm.albums.ensureLoaded() }
             "playlists" -> vm.playlists.ensureLoaded()
             "radio" -> vm.radios.ensureLoaded()
             "favourites" -> vm.ensureFavouritesLoaded()
@@ -138,7 +138,7 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
             "albums" -> IndexedGrid(vm, nav, vm.albums, columns = 6, round = false, loadingText = "Sorting your albums by artist…", onBackToTop = { runCatching { tabFocus.requestFocus() } }, showTopRows = true)
             "playlists" -> IndexedGrid(vm, nav, vm.playlists, columns = 6, round = false, loadingText = "Loading playlists…", onBackToTop = { runCatching { tabFocus.requestFocus() } })
             "radio" -> IndexedGrid(vm, nav, vm.radios, columns = 6, round = false, loadingText = "Loading radio stations…", onBackToTop = { runCatching { tabFocus.requestFocus() } })
-            "genres" -> IndexedGrid(vm, nav, vm.genres, columns = 6, round = false, loadingText = "Loading genres…", onBackToTop = { runCatching { tabFocus.requestFocus() } })
+            "genres" -> GenreGrid(vm, nav)
             "favourites" -> FavouritesTab(vm, nav)
             else -> IndexedGrid(vm, nav, vm.artists, columns = 7, round = true, loadingText = "Sorting your artists…", onBackToTop = { runCatching { tabFocus.requestFocus() } })
         }
@@ -187,7 +187,7 @@ private fun AlbumRow(
                     item, vm.imageUrl(item, 256),
                     onClick = { openOrPlay(vm, nav, item) },
                     modifier = Modifier.width(150.dp),
-                    hiRes = HiResIndex.marks(item, hiResAlbums),
+                    hiRes = AlbumScan.marks(item, hiResAlbums),
                 )
             }
         }
@@ -197,7 +197,7 @@ private fun AlbumRow(
 @Composable
 private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: Int, round: Boolean, loadingText: String, onBackToTop: () -> Unit, showTopRows: Boolean = false) {
     val state by index.state.collectAsStateWithLifecycle()
-    val hiResAlbums by vm.hiRes.hiRes.collectAsStateWithLifecycle()
+    val hiResAlbums by vm.albumScan.hiRes.collectAsStateWithLifecycle()
 
     if (!state.ready) {
         Column(Modifier.fillMaxSize()) {
@@ -303,7 +303,7 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
                     .then(if (index == focusIndex) Modifier.focusRequester(itemFocus) else Modifier)
                 val own = vm.imageUrl(item, 256)
                 val url = if (own == null && round) vm.artistCover(item, 256).collectAsStateWithLifecycle().value else own
-                MediaCard(item, url, onClick = { openOrPlay(vm, nav, item) }, modifier = mod, round = round, onLongClick = { menuFor = item }, hiRes = HiResIndex.marks(item, hiResAlbums))
+                MediaCard(item, url, onClick = { openOrPlay(vm, nav, item) }, modifier = mod, round = round, onLongClick = { menuFor = item }, hiRes = AlbumScan.marks(item, hiResAlbums))
             }
         }
     }
