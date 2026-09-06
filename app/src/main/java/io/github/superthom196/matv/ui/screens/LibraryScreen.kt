@@ -88,7 +88,9 @@ import io.github.superthom196.matv.ui.Nav
 import io.github.superthom196.matv.ui.VSpace
 import io.github.superthom196.matv.ui.Wordmark
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
 @Composable
 fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
@@ -127,7 +129,7 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
             HSpace(6.dp)
             IconChip(Icons.Default.Search, "Search", onClick = { nav.push(MainScreen.Search) })
             Box(Modifier.weight(1f))
-            NowPlayingChip(ui, onClick = { nav.push(MainScreen.NowPlaying) })
+            NowPlayingChip(vm, onClick = { nav.push(MainScreen.NowPlaying) })
             HSpace(4.dp)
             IconChip(Icons.Default.Settings, "Settings", onClick = { nav.push(MainScreen.Settings) })
         }
@@ -327,8 +329,10 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
 }
 
 @Composable
-fun NowPlayingChip(ui: UiState, onClick: () -> Unit) {
-    val np = ui.nowPlaying
+fun NowPlayingChip(vm: AppViewModel, onClick: () -> Unit) {
+    // Only re-reads when the parts of NowPlaying this chip shows actually change, not once a second
+    // while playing (vm.ui itself no longer ticks, but this keeps the chip decoupled either way).
+    val np by remember { vm.ui.map { it.nowPlaying }.distinctUntilChanged() }.collectAsStateWithLifecycle(vm.ui.value.nowPlaying)
     FocusSurface(onClick = onClick, shape = androidx.compose.foundation.shape.RoundedCornerShape(50)) {
         Row(Modifier.padding(start = 5.dp, end = 12.dp, top = 5.dp, bottom = 5.dp), verticalAlignment = Alignment.CenterVertically) {
             Artwork(np.imageUrl, Modifier.size(34.dp), corner = 50.dp)

@@ -1,5 +1,6 @@
 package io.github.superthom196.matv
 
+import android.util.Log
 import io.github.superthom196.matv.ma.MediaItem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +28,7 @@ data class AlbumsByArtist(
 
 private const val BATCH = 200
 private const val HARD_CAP = 20_000
+private const val TAG = "AlbumIndex"
 
 /**
  * The whole Albums library, sorted by artist and indexed by letter.
@@ -35,10 +37,13 @@ private const val HARD_CAP = 20_000
  */
 class AlbumIndex(
     private val scope: CoroutineScope,
+    private val name: String,                       // for log lines, e.g. "albums"
     private val count: suspend () -> Int?,
     private val fetch: suspend (offset: Int, limit: Int) -> List<MediaItem>,
     /** Primary sort key and letter bucket: album artist for albums, the artist's own name for artists. */
     private val sortKey: (MediaItem) -> String = ::artistSortKey,
+    private val cached: (suspend () -> List<MediaItem>?)? = null,   // last known copy from disk
+    private val persist: (suspend (List<MediaItem>) -> Unit)? = null, // keep the fresh list for next time
 ) {
     private val _state = MutableStateFlow(AlbumsByArtist())
     val state: StateFlow<AlbumsByArtist> = _state.asStateFlow()
@@ -47,18 +52,30 @@ class AlbumIndex(
     fun ensureLoaded() {
         val cur = _state.value
         if (cur.ready || cur.loading) return
-        load()
+        load(useCache = true)
     }
 
-    fun reload() = load()
+    fun reload() = load(useCache = false)
 
-    private fun load() {
+    private fun load(useCache: Boolean) {
         job?.cancel()
-        _state.value = AlbumsByArtist(loading = true)
+        val cur = _state.value
+        _state.value = if (cur.ready) cur.copy(loading = true, error = null) else AlbumsByArtist(loading = true)
         job = scope.launch {
+            val t0 = System.currentTimeMillis()
+            var shown: List<MediaItem>? = null
+            if (useCache) {
+                val fromDisk = runCatching { cached?.invoke() }.getOrNull()
+                if (!fromDisk.isNullOrEmpty()) {
+                    val (sorted, anchors) = withContext(Dispatchers.Default) { buildAlbumIndex(fromDisk, sortKey) }
+                    shown = sorted
+                    _state.value = AlbumsByArtist(items = sorted, anchors = anchors, loading = true, ready = true, loaded = sorted.size, total = sorted.size)
+                    Log.i(TAG, "$name: ${sorted.size} from cache, on screen after ${System.currentTimeMillis() - t0} ms")
+                }
+            }
             try {
                 val total = count()
-                _state.update { it.copy(total = total) }
+                if (shown == null) _state.update { it.copy(total = total) }
                 val seen = HashSet<String>()
                 val all = ArrayList<MediaItem>()
                 var offset = 0
@@ -66,13 +83,29 @@ class AlbumIndex(
                     val batch = fetch(offset, BATCH)
                     for (item in batch) if (seen.add("${item.provider}:${item.itemId}")) all.add(item)
                     offset += batch.size
-                    _state.update { it.copy(loaded = all.size) }
+                    if (shown == null) _state.update { it.copy(loaded = all.size) }
                     if (batch.size < BATCH || offset >= HARD_CAP) break
                 }
+                val tFetch = System.currentTimeMillis()
                 val (sorted, anchors) = withContext(Dispatchers.Default) { buildAlbumIndex(all, sortKey) }
-                _state.value = AlbumsByArtist(items = sorted, anchors = anchors, ready = true, loaded = sorted.size, total = total)
+                val tSort = System.currentTimeMillis()
+                val changed = shown == null || shown != sorted
+                if (changed) {
+                    _state.value = AlbumsByArtist(items = sorted, anchors = anchors, ready = true, loaded = sorted.size, total = total)
+                } else {
+                    _state.update { it.copy(loading = false, total = total) }
+                }
+                Log.i(TAG, "$name: ${all.size} from server in ${tFetch - t0} ms, sorted in ${tSort - tFetch} ms, ${if (changed) "replaced" else "unchanged"}")
+                if (changed || shown == null) {
+                    runCatching { persist?.invoke(all) }.onFailure { Log.w(TAG, "$name: cache write failed: ${it.message}") }
+                }
             } catch (e: Exception) {
-                _state.update { it.copy(loading = false, error = e.message ?: "Failed to load albums") }
+                if (shown == null) {
+                    _state.update { it.copy(loading = false, error = e.message ?: "Failed to load albums") }
+                } else {
+                    // Server refresh failed but the cached list is already on screen: stay quiet and usable.
+                    _state.update { it.copy(loading = false) }
+                }
             }
         }
     }

@@ -75,7 +75,7 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
     Row(Modifier.fillMaxSize().padding(start = 28.dp, end = 28.dp, top = 20.dp)) {
         // Left: artwork + actions
         Column(Modifier.width(360.dp)) {
-            Artwork(vm.imageUrl(item, 512), Modifier.size(320.dp), corner = if (item.mediaType == "artist") 200.dp else 14.dp)
+            Artwork(vm.imageUrl(item, 512), Modifier.size(320.dp), corner = if (item.mediaType == "artist") 200.dp else 14.dp, crossfade = true)
             VSpace(22.dp)
             Text(item.name, style = MaterialTheme.typography.headlineMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             val sub = when (item.mediaType) {

@@ -64,6 +64,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import io.github.superthom196.matv.ma.MediaItem
 
 /** A focusable, clickable panel with the app's focus treatment: white ring, slight grow. */
@@ -153,10 +156,12 @@ fun RoundIconButton(
 
 /** Square artwork with a placeholder. */
 @Composable
-fun Artwork(url: String?, modifier: Modifier = Modifier, corner: androidx.compose.ui.unit.Dp = 10.dp) {
+fun Artwork(url: String?, modifier: Modifier = Modifier, corner: androidx.compose.ui.unit.Dp = 10.dp, crossfade: Boolean = false) {
     Box(modifier.clip(RoundedCornerShape(corner)).background(Color(0xFF2A2A2A))) {
         if (url != null) {
-            AsyncImage(model = url, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            val context = LocalPlatformContext.current
+            val request = remember(url, crossfade) { ImageRequest.Builder(context).data(url).crossfade(crossfade).build() }
+            AsyncImage(model = request, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Box(Modifier.size(28.dp).clip(CircleShape).background(HiFiColors.Accent.copy(alpha = 0.5f)))

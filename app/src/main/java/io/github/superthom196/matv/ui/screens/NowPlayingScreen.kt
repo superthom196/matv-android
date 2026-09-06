@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,6 +47,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -61,6 +63,7 @@ import io.github.superthom196.matv.ui.PillButton
 import io.github.superthom196.matv.ui.RoundIconButton
 import io.github.superthom196.matv.ui.VSpace
 import io.github.superthom196.matv.ui.formatTime
+import kotlinx.coroutines.delay
 
 /** The screen that makes the hi-fi feel like part of the room. */
 @Composable
@@ -80,7 +83,7 @@ fun NowPlayingScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x00181818), Color(0xCC181818)))))
 
         Row(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 24.dp), verticalAlignment = Alignment.CenterVertically) {
-            Artwork(np.imageUrl, Modifier.size(440.dp), corner = 18.dp)
+            Artwork(np.imageUrl, Modifier.size(440.dp), corner = 18.dp, crossfade = true)
             HSpace(56.dp)
             Column(Modifier.fillMaxHeight().weight(1f), verticalArrangement = Arrangement.Center) {
                 // Player chip / state
@@ -128,9 +131,15 @@ fun NowPlayingScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
                     Text("Pick something from the library.", style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted)
                 }
                 VSpace(18.dp)
-                // Progress
+                // Progress. elapsed comes from vm.position, not vm.ui: only this screen ticks once a
+                // second while playing, so the rest of the app is not recomposed by the clock.
+                val pos by vm.position.collectAsStateWithLifecycle()
+                val live by produceState(pos.now(), pos) {
+                    value = pos.now()
+                    while (pos.playing) { delay(1000); value = pos.now() }
+                }
                 val dur = np.duration ?: 0.0
-                val elapsed = if (dur > 0) np.elapsed.coerceAtMost(dur) else np.elapsed
+                val elapsed = if (dur > 0) live.coerceAtMost(dur) else live
                 val frac = if (dur > 0) (elapsed / dur).coerceIn(0.0, 1.0).toFloat() else 0f
                 Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(Color(0x33FFFFFF))) {
                     Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(HiFiColors.Accent))

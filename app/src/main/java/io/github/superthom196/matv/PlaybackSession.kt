@@ -7,6 +7,7 @@ import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import kotlin.math.abs
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
@@ -47,9 +48,34 @@ class PlaybackSession(context: Context, private val vm: AppViewModel, owner: Lif
         vm.setVolume(clamped * 100 / TV_VOLUME_STEPS)
     }
 
+    // What was last published, so metadata and state are only rebuilt when they actually change —
+    // not every time vm.ui or vm.position emits.
+    private var lastState: Int = PlaybackState.STATE_NONE
+    private var lastPos: Position? = null
+    private var lastMeta: NowPlaying? = null
+
+    /** The MediaSession STATE_* for what vm.ui says right now. */
+    private fun stateOf(np: NowPlaying): Int = when {
+        !np.hasMedia -> PlaybackState.STATE_STOPPED
+        np.state == "playing" -> PlaybackState.STATE_PLAYING
+        np.state == "paused" -> PlaybackState.STATE_PAUSED
+        else -> PlaybackState.STATE_STOPPED
+    }
+
+    private fun publishState(stateCode: Int, positionMs: Long, playing: Boolean) {
+        session.setPlaybackState(
+            PlaybackState.Builder()
+                .setActions(PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_STOP or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS)
+                .setState(stateCode, positionMs, if (playing) 1f else 0f)
+                .build(),
+        )
+    }
+
     init {
         session.setPlaybackToRemote(volumeProvider)
         owner.lifecycleScope.launch {
+            // Metadata, volume and active-ness: none of these tick on their own, so this collector
+            // only has to react when vm.ui actually changes.
             vm.ui.collect { ui ->
                 // Follow the hi-fi: it also moves from the app's own volume row and other controllers.
                 val notches = ((ui.selectedPlayer?.volumeLevel ?: 0) * TV_VOLUME_STEPS + 50) / 100
@@ -57,7 +83,8 @@ class PlaybackSession(context: Context, private val vm: AppViewModel, owner: Lif
                 if (volumeProvider.currentVolume != clamped) volumeProvider.currentVolume = clamped
 
                 val np = ui.nowPlaying
-                if (np.hasMedia) {
+                val meta = lastMeta
+                if (np.hasMedia && (meta == null || meta.title != np.title || meta.artist != np.artist || meta.album != np.album || meta.duration != np.duration)) {
                     session.setMetadata(
                         MediaMetadata.Builder()
                             .putString(MediaMetadata.METADATA_KEY_TITLE, np.title)
@@ -66,22 +93,31 @@ class PlaybackSession(context: Context, private val vm: AppViewModel, owner: Lif
                             .putLong(MediaMetadata.METADATA_KEY_DURATION, ((np.duration ?: 0.0) * 1000).toLong())
                             .build(),
                     )
+                    lastMeta = np
                 }
-                val state = when {
-                    !np.hasMedia -> PlaybackState.STATE_STOPPED
-                    np.state == "playing" -> PlaybackState.STATE_PLAYING
-                    np.state == "paused" -> PlaybackState.STATE_PAUSED
-                    else -> PlaybackState.STATE_STOPPED
+
+                val stateCode = stateOf(np)
+                if (stateCode != lastState) {
+                    lastState = stateCode
+                    publishState(stateCode, (vm.position.value.now() * 1000).toLong(), np.isPlaying)
                 }
-                session.setPlaybackState(
-                    PlaybackState.Builder()
-                        .setActions(PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_STOP or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS)
-                        .setState(state, (np.elapsed * 1000).toLong(), if (np.isPlaying) 1f else 0f)
-                        .build(),
-                )
+
                 // Active whenever a player is chosen, not just while something plays, so the volume
                 // keys still reach the hi-fi when it is sitting idle.
                 session.isActive = ui.selectedPlayerId != null
+            }
+        }
+        owner.lifecycleScope.launch {
+            // vm.position moves roughly once a second while playing, but MediaSession already
+            // extrapolates a position at speed 1f on its own — so only drift (the hi-fi's clock
+            // disagreeing with ours) or a play/pause flip need a new state object here.
+            vm.position.collect { pos ->
+                val expected = lastPos?.now()
+                val drifted = expected != null && abs(pos.now() - expected) > 2.0
+                if (lastPos == null || pos.playing != lastPos?.playing || drifted) {
+                    publishState(lastState, (pos.now() * 1000).toLong(), pos.playing)
+                }
+                lastPos = pos
             }
         }
     }

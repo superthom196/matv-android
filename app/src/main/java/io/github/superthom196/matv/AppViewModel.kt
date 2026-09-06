@@ -11,6 +11,7 @@ import io.github.superthom196.matv.ma.MaAuthException
 import io.github.superthom196.matv.ma.MaClient
 import io.github.superthom196.matv.ma.MaDiscovery
 import io.github.superthom196.matv.ma.MediaItem
+import io.github.superthom196.matv.ma.MediaItemImage
 import io.github.superthom196.matv.ma.Player
 import io.github.superthom196.matv.ma.PlayerQueue
 import io.github.superthom196.matv.ma.QueueItem
@@ -55,7 +56,6 @@ data class NowPlaying(
     val album: String = "",
     val imageUrl: String? = null,
     val duration: Double? = null,
-    val elapsed: Double = 0.0,
     val state: String = "idle",
     val nextTitle: String? = null,
     val queueName: String = "",
@@ -75,6 +75,12 @@ data class NowPlaying(
 
     /** e.g. "FLAC 24/44.1" — blank when the server has not told us what it is streaming. */
     val formatLabel: String get() = audioFormatLabel(codec, bitDepth, sampleRateKhz)
+}
+
+/** Where playback is, as of a moment on the local clock; screens extrapolate from it while playing. */
+data class Position(val elapsed: Double = 0.0, val at: Long = 0L, val playing: Boolean = false) {
+    /** Seconds into the track right now. */
+    fun now(): Double = if (playing) elapsed + (android.os.SystemClock.elapsedRealtime() - at) / 1000.0 else elapsed
 }
 
 data class UiState(
@@ -115,12 +121,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val client = MaClient()
     private val prefs = Prefs(app)
+    private val libraryCache = LibraryCache(app)
     private val discovery = MaDiscovery(app, client)
-    val albums = AlbumIndex(viewModelScope, count = { client.albumsCount() }, fetch = { off, lim -> client.libraryItems("albums", off, lim) })
-    val artists = AlbumIndex(viewModelScope, count = { client.artistsCount() }, fetch = { off, lim -> client.libraryItems("artists", off, lim) }, sortKey = ::artistNameKey)
-    val playlists = AlbumIndex(viewModelScope, count = { client.libraryCount("playlists") }, fetch = { off, lim -> client.libraryItems("playlists", off, lim) }, sortKey = ::artistNameKey)
-    val radios = AlbumIndex(viewModelScope, count = { client.libraryCount("radios") }, fetch = { off, lim -> client.libraryItems("radios", off, lim) }, sortKey = ::artistNameKey)
-    val genres = AlbumIndex(viewModelScope, count = { client.libraryCount("genres") }, fetch = { off, lim -> client.libraryItems("genres", off, lim) }, sortKey = ::artistNameKey)
+
+    /** Server the cache belongs to; set in [afterConnected] before any tab calls ensureLoaded. */
+    private fun serverId(): String = _ui.value.server?.serverId ?: ""
+
+    val albums = AlbumIndex(
+        viewModelScope, name = "albums", count = { client.albumsCount() }, fetch = { off, lim -> client.libraryItems("albums", off, lim) },
+        cached = { serverId().takeIf { it.isNotBlank() }?.let { libraryCache.read("albums", it) } },
+        persist = { items -> serverId().takeIf { it.isNotBlank() }?.let { libraryCache.write("albums", it, items) } },
+    )
+    val artists = AlbumIndex(
+        viewModelScope, name = "artists", count = { client.artistsCount() }, fetch = { off, lim -> client.libraryItems("artists", off, lim) }, sortKey = ::artistNameKey,
+        cached = { serverId().takeIf { it.isNotBlank() }?.let { libraryCache.read("artists", it) } },
+        persist = { items -> serverId().takeIf { it.isNotBlank() }?.let { libraryCache.write("artists", it, items) } },
+    )
+    val playlists = AlbumIndex(viewModelScope, name = "playlists", count = { client.libraryCount("playlists") }, fetch = { off, lim -> client.libraryItems("playlists", off, lim) }, sortKey = ::artistNameKey)
+    val radios = AlbumIndex(viewModelScope, name = "radios", count = { client.libraryCount("radios") }, fetch = { off, lim -> client.libraryItems("radios", off, lim) }, sortKey = ::artistNameKey)
+    val genres = AlbumIndex(viewModelScope, name = "genres", count = { client.libraryCount("genres") }, fetch = { off, lim -> client.libraryItems("genres", off, lim) }, sortKey = ::artistNameKey)
 
     /**
      * Seed for the Random row, fixed for the life of the app. Reshuffling on every recomposition
@@ -142,7 +161,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // Load the cached verdicts, then top up the scan whenever the album library finishes loading.
         viewModelScope.launch {
             albumScan.restore()
-            albums.state.collect { st -> if (st.ready) albumScan.ensureScanned(st.items) }
+            albums.state.collect { st ->
+                if (st.ready) {
+                    // The cached list lands almost instantly; give the first scroll a clear run before
+                    // three album_tracks decodes start competing for this two-core TV's CPU. Nothing is
+                    // lost by waiting — the scan itself is persisted, so a killed app just resumes later.
+                    delay(5_000)
+                    albumScan.ensureScanned(st.items)
+                }
+            }
         }
     }
 
@@ -166,6 +193,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
 
+    /** Elapsed/playing as of a clock stamp; the only per-second-ish state, kept out of [UiState] so the
+     * rest of the app does not recompose off it. Only [NowPlayingScreen] reads it. */
+    private val _position = MutableStateFlow(Position())
+    val position: StateFlow<Position> = _position.asStateFlow()
+
     /** Items of the selected player's queue; only kept fresh while the Queue screen is showing. */
     data class QueueView(val items: List<QueueItem> = emptyList(), val currentIndex: Int? = null, val loading: Boolean = false, val error: String? = null)
     private val _queue = MutableStateFlow(QueueView())
@@ -184,7 +216,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val queues = java.util.concurrent.ConcurrentHashMap<String, PlayerQueue>()
     private var discoveryJob: Job? = null
-    private var tickerJob: Job? = null
 
     init {
         viewModelScope.launch { client.state.collect { st -> onConnectionState(st) } }
@@ -318,6 +349,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             client.disconnect()
             prefs.clearServer()
+            libraryCache.clear()
             queues.clear()
             albums.reset()
             artists.reset()
@@ -326,6 +358,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _favourites.value = Favourites()
             _favOverrides.value = emptyMap()
             _folders.value = emptyList()
+            artistCovers.clear()
+            artistCoverCache.clear()
             AuthHolder.token = null
             _ui.value = UiState(phase = Phase.Connect)
             startDiscovery()
@@ -350,6 +384,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 selectedPlayerId = it.selectedPlayerId ?: cfg.playerId, connectError = null,
             )
         }
+        // Restore the artist-cover lookups saved for this server so borrowed covers show at once
+        // instead of re-requesting artist_albums for every artist scrolled past.
+        artistCovers.clear()
+        artistCoverCache.clear()
+        artistCovers.putAll(libraryCache.readCovers(serverId()))
         refreshAll()
     }
 
@@ -384,11 +423,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         when (event) {
             "player_updated", "player_added" -> {
                 val p = runCatching { maJson.decodeFromJsonElement(Player.serializer(), data) }.getOrNull() ?: return
-                _ui.update { st ->
-                    val list = if (st.players.any { it.playerId == p.playerId }) st.players.map { if (it.playerId == p.playerId) p else it } else st.players + p
-                    st.copy(players = list)
+                val existing = _ui.value.players.firstOrNull { it.playerId == p.playerId }
+                // A player that only reports its own clock (elapsed_time ticking every second) must not
+                // redraw every screen; compare with the clock fields blanked out and skip the list update
+                // when nothing else changed.
+                val clockOnly = existing != null && existing.copy(elapsedTime = null, elapsedTimeLastUpdated = null) == p.copy(elapsedTime = null, elapsedTimeLastUpdated = null)
+                if (!clockOnly) {
+                    _ui.update { st ->
+                        val list = if (existing != null) st.players.map { if (it.playerId == p.playerId) p else it } else st.players + p
+                        st.copy(players = list)
+                    }
                 }
-                if (p.playerId == _ui.value.selectedPlayerId) recomputeNowPlaying()
+                // Still follow the clock for the selected player, list update or not, so position tracks
+                // it — pass the freshly-decoded player straight in, since a skipped list update means
+                // st.selectedPlayer would otherwise still be the stale one.
+                if (p.playerId == _ui.value.selectedPlayerId) recomputeNowPlaying(p)
             }
             "player_removed" -> {
                 val id = objectId ?: return
@@ -419,9 +468,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(activeQueueId = q?.queueId ?: playerId) }
     }
 
-    private fun recomputeNowPlaying() {
+    /** [livePlayer] overrides st.selectedPlayer: used when a clock-only player_updated skipped the
+     * players-list update, so the freshest elapsed_time still reaches [position]. */
+    private fun recomputeNowPlaying(livePlayer: Player? = null) {
         val st = _ui.value
-        val player = st.selectedPlayer
+        val player = livePlayer ?: st.selectedPlayer
         val q = st.activeQueueId?.let { queues[it] }
         val base = st.baseUrl
         val cur = q?.currentItem
@@ -434,7 +485,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             album = mi?.album?.name ?: pm?.album ?: "",
             imageUrl = ImageUrls.forQueueItem(base, cur, 1024) ?: ImageUrls.forPlayerMedia(base, pm?.imageUrl),
             duration = cur?.duration ?: mi?.duration ?: pm?.duration,
-            elapsed = q?.elapsedTime ?: player?.elapsedTime ?: 0.0,
             state = q?.state ?: player?.playbackState ?: "idle",
             nextTitle = q?.nextItem?.name,
             queueName = q?.displayName ?: player?.name ?: "",
@@ -447,21 +497,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             fidelity = cur?.streamdetails?.fidelity,
         )
         _ui.update { it.copy(nowPlaying = np) }
-        ensureTicker(np.isPlaying)
-    }
-
-    /** Local 1 Hz clock between server time updates: no polling. */
-    private fun ensureTicker(playing: Boolean) {
-        if (!playing) { tickerJob?.cancel(); tickerJob = null; return }
-        if (tickerJob?.isActive == true) return
-        tickerJob = viewModelScope.launch {
-            while (isActive) {
-                delay(1000)
-                _ui.update { st ->
-                    val np = st.nowPlaying
-                    if (!np.isPlaying) st else st.copy(nowPlaying = np.copy(elapsed = np.elapsed + 1.0))
-                }
-            }
+        // Re-stamp the local clock only when the server's own numbers actually moved — an unrelated
+        // player_updated (volume, say) must not restamp a stale elapsed with a fresh clock time.
+        val elapsed = q?.elapsedTime ?: player?.elapsedTime ?: 0.0
+        val prev = _position.value
+        if (elapsed != prev.elapsed || np.isPlaying != prev.playing) {
+            _position.value = Position(elapsed, android.os.SystemClock.elapsedRealtime(), np.isPlaying)
         }
     }
 
@@ -590,21 +631,45 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun imageUrl(item: MediaItem?, size: Int): String? = ImageUrls.forItem(_ui.value.baseUrl, item, size)
 
     // Artists without their own image (no fanart.tv / TheAudioDB match) borrow an album cover.
+    // Keyed "provider:item_id" (no size); a null value means it was looked up and has no art to
+    // borrow. Only touched from the main thread — viewModelScope is Main, so no lock is needed.
+    private val artistCovers = HashMap<String, MediaItemImage?>()
     private val artistCoverCache = java.util.concurrent.ConcurrentHashMap<String, MutableStateFlow<String?>>()
     private val artistCoverGate = kotlinx.coroutines.sync.Semaphore(3)
+    private var coverSaveJob: Job? = null
 
     fun artistCover(artist: MediaItem, size: Int): StateFlow<String?> {
-        val key = "${artist.provider}:${artist.itemId}:$size"
-        artistCoverCache[key]?.let { return it }
+        val key = "${artist.provider}:${artist.itemId}"
+        val cacheKey = "$key:$size"
+        artistCoverCache[cacheKey]?.let { return it }
         val flow = MutableStateFlow<String?>(null)
-        artistCoverCache[key] = flow
-        viewModelScope.launch {
-            artistCoverGate.withPermit {
-                val albums = runCatching { client.artistAlbums(artist, inLibraryOnly = true) }.getOrDefault(emptyList())
-                flow.value = albums.firstNotNullOfOrNull { ImageUrls.forImage(_ui.value.baseUrl, it.thumb, size) }
+        artistCoverCache[cacheKey] = flow
+        if (artistCovers.containsKey(key)) {
+            // Already looked up this launch (or restored from disk): no request needed.
+            flow.value = ImageUrls.forImage(_ui.value.baseUrl, artistCovers[key], size)
+        } else {
+            viewModelScope.launch {
+                artistCoverGate.withPermit {
+                    val artistAlbums = runCatching { client.artistAlbums(artist, inLibraryOnly = true) }.getOrNull() ?: return@withPermit
+                    val hit = artistAlbums.firstOrNull { ImageUrls.forImage(_ui.value.baseUrl, it.thumb, size) != null }
+                    // Store even a miss (null) so a genuinely cover-less artist isn't re-requested next
+                    // scroll; a thrown request is left alone above so it retries on the next launch.
+                    artistCovers[key] = hit?.thumb
+                    flow.value = hit?.thumb?.let { ImageUrls.forImage(_ui.value.baseUrl, it, size) }
+                    scheduleCoverSave()
+                }
             }
         }
         return flow
+    }
+
+    /** Debounced write of the whole artist-cover map: one file write, not one per lookup. */
+    private fun scheduleCoverSave() {
+        coverSaveJob?.cancel()
+        coverSaveJob = viewModelScope.launch {
+            delay(2_000)
+            libraryCache.writeCovers(serverId(), HashMap(artistCovers))
+        }
     }
 
     // ------------------------------------------------------------------ queue
