@@ -136,8 +136,6 @@ class Prefs(private val context: Context) {
         }
     }
 
-    suspend fun saveToken(token: String) { context.dataStore.edit { it[K.token] = token } }
-
     suspend fun savePlayer(playerId: String) { context.dataStore.edit { it[K.playerId] = playerId } }
 
     suspend fun clearServer() {

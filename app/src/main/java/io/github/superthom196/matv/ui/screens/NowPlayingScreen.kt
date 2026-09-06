@@ -18,6 +18,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
@@ -39,6 +42,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -46,6 +50,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Icon
@@ -55,6 +60,7 @@ import coil3.compose.AsyncImage
 import io.github.superthom196.matv.AppViewModel
 import io.github.superthom196.matv.UiState
 import io.github.superthom196.matv.ui.Artwork
+import io.github.superthom196.matv.ui.FocusSurface
 import io.github.superthom196.matv.ui.HSpace
 import io.github.superthom196.matv.ui.HiFiColors
 import io.github.superthom196.matv.ui.MainScreen
@@ -89,6 +95,19 @@ fun NowPlayingScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
                 // Player chip / state
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     PillButton("Queue", onClick = { nav.push(MainScreen.Queue) }, icon = Icons.AutoMirrored.Filled.QueueMusic)
+                    // Shuffle / repeat live up here: the transport row below is already as wide as the column.
+                    HSpace(10.dp)
+                    TintedIconButton(
+                        Icons.Default.Shuffle, if (np.shuffle) "Shuffle on" else "Shuffle off",
+                        tint = if (np.shuffle) HiFiColors.Accent else HiFiColors.Muted,
+                        onClick = { vm.toggleShuffle() }, size = 40.dp,
+                    )
+                    HSpace(6.dp)
+                    TintedIconButton(
+                        if (np.repeat == "one") Icons.Default.RepeatOne else Icons.Default.Repeat, "Repeat: ${np.repeat}",
+                        tint = if (np.repeat != "off") HiFiColors.Accent else HiFiColors.Muted,
+                        onClick = { vm.cycleRepeat() }, size = 40.dp,
+                    )
                     HSpace(14.dp)
                     Text(
                         when (np.state) { "playing" -> "Playing"; "paused" -> "Paused"; else -> "Idle" },
@@ -141,14 +160,36 @@ fun NowPlayingScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
                 val dur = np.duration ?: 0.0
                 val elapsed = if (dur > 0) live.coerceAtMost(dur) else live
                 val frac = if (dur > 0) (elapsed / dur).coerceIn(0.0, 1.0).toFloat() else 0f
-                Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(Color(0x33FFFFFF))) {
-                    Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(HiFiColors.Accent))
-                }
-                VSpace(8.dp)
-                Row(Modifier.fillMaxWidth()) {
-                    Text(formatTime(elapsed), style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted)
-                    Box(Modifier.weight(1f))
-                    Text(formatTime(np.duration), style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted)
+                // Focusable like the volume row: left / right seek by 15 s. Holding the key repeats
+                // ACTION_DOWN, and each repeat is let through as another 15 s step — that's the ramp.
+                var seekFocused by remember { mutableStateOf(false) }
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .onKeyEvent { ev ->
+                            if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
+                            when (ev.key) {
+                                Key.DirectionRight -> { vm.seekRelative(15); true }
+                                Key.DirectionLeft -> { vm.seekRelative(-15); true }
+                                else -> false
+                            }
+                        }
+                        .onFocusChanged { seekFocused = it.isFocused }
+                        .focusable()
+                        .background(if (seekFocused) HiFiColors.SurfaceHigh else Color.Transparent, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    Box(Modifier.fillMaxWidth().height(if (seekFocused) 10.dp else 8.dp).clip(RoundedCornerShape(5.dp)).background(Color(0x33FFFFFF))) {
+                        Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(if (seekFocused) HiFiColors.Focus else HiFiColors.Accent))
+                    }
+                    VSpace(8.dp)
+                    Row(Modifier.fillMaxWidth()) {
+                        Text(formatTime(elapsed), style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted)
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            if (seekFocused) Text("◀ ▶ to seek", style = MaterialTheme.typography.labelSmall, color = HiFiColors.Muted)
+                        }
+                        Text(formatTime(np.duration), style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted)
+                    }
                 }
                 VSpace(18.dp)
                 // Transport
@@ -164,6 +205,26 @@ fun NowPlayingScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
                 VSpace(14.dp)
                 VolumeRow(level = player?.volumeLevel ?: 0, muted = player?.volumeMuted == true, onUp = { vm.volumeUp() }, onDown = { vm.volumeDown() })
             }
+        }
+    }
+}
+
+/**
+ * Round icon button like [RoundIconButton], but with a caller-chosen icon tint so it can show
+ * on/off state (shuffle, repeat) instead of the primary/secondary container it offers.
+ */
+@Composable
+private fun TintedIconButton(icon: ImageVector, contentDescription: String, tint: Color, onClick: () -> Unit, size: Dp = 52.dp) {
+    FocusSurface(
+        onClick = onClick,
+        modifier = Modifier.size(size),
+        shape = RoundedCornerShape(50),
+        container = HiFiColors.SurfaceHigh,
+        focusedContainer = Color(0xFF3A3A3A),
+        scale = 1.1f,
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription, tint = tint, modifier = Modifier.size(size * 0.5f))
         }
     }
 }

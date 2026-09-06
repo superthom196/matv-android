@@ -21,6 +21,7 @@ import io.github.superthom196.matv.ma.SavedConfig
 import io.github.superthom196.matv.ma.ServerInfo
 import io.github.superthom196.matv.ma.audioFormatLabel
 import io.github.superthom196.matv.ma.maJson
+import io.github.superthom196.matv.ma.stringField
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -101,6 +102,8 @@ data class UiState(
     val discovered: List<DiscoveredServer> = emptyList(),
     val discovering: Boolean = false,
     val connectError: String? = null,
+    /** True once a connection has ever succeeded this run; distinguishes "still connecting" from "never got there". */
+    val everConnected: Boolean = false,
 ) {
     val selectedPlayer: Player? get() = players.firstOrNull { it.playerId == selectedPlayerId }
     val selectablePlayers: List<Player> get() = players.filter { it.isSelectable }.sortedBy { it.name.lowercase() }
@@ -150,9 +153,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun shuffledAlbums(items: List<MediaItem>): List<MediaItem> = items.shuffled(kotlin.random.Random(shuffleSeed))
 
     /** Newest-first albums for the "Latest" row; the server does the ordering.  */
-    val recentAlbums = RecentAlbums(viewModelScope) { off, lim ->
-        client.libraryItems("albums", off, lim, orderBy = "timestamp_added_desc")
-    }
+    val recentAlbums = RecentAlbums(
+        viewModelScope, fetch = { off, lim -> client.libraryItems("albums", off, lim, orderBy = "timestamp_added_desc") },
+        cached = { serverId().takeIf { it.isNotBlank() }?.let { libraryCache.read("latest", it) } },
+        persist = { items -> serverId().takeIf { it.isNotBlank() }?.let { libraryCache.write("latest", it, items) } },
+    )
 
     /** Hi-res and genre facts per album, learned in the background and cached on disk. */
     val albumScan = AlbumScan(viewModelScope, prefs, tracksOf = { client.albumTracks(it) })
@@ -175,6 +180,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val settings: StateFlow<AppSettings> = prefs.settings.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
     fun updateSettings(transform: (AppSettings) -> AppSettings) { viewModelScope.launch { prefs.saveSettings(transform(settings.value)) } }
+
+    /** Ask the server to look for new/changed/removed media; the grids reload themselves as the
+     * resulting media_item events land (see [onEvent] / [scheduleLibraryReload]). */
+    fun rescanLibrary() = cmd { client.startSync(); flash("Rescanning library…") }
+
+    suspend fun libraryCacheBytes(): Long = libraryCache.sizeBytes()
+
+    fun clearLibraryCache() {
+        viewModelScope.launch {
+            libraryCache.clear()
+            albums.reload()
+            artists.reload()
+            recentAlbums.reload()
+            flash("Cache cleared")
+        }
+    }
 
     /** Favourite flags changed in this session, keyed "provider:item_id"; the server's own flag is the fallback. */
     private val _favOverrides = MutableStateFlow<Map<String, Boolean>>(emptyMap())
@@ -216,6 +237,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val queues = java.util.concurrent.ConcurrentHashMap<String, PlayerQueue>()
     private var discoveryJob: Job? = null
+    private var libraryReloadJob: Job? = null
 
     init {
         viewModelScope.launch { client.state.collect { st -> onConnectionState(st) } }
@@ -235,7 +257,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun bootstrap() {
         val cfg = prefs.current()
         if (!cfg.hasServer) { _ui.update { it.copy(phase = Phase.Connect) }; startDiscovery(); return }
-        _ui.update { it.copy(phase = Phase.Loading, baseUrl = cfg.baseUrl, username = cfg.username, selectedPlayerId = cfg.playerId) }
+        // Jump straight to Main with what's saved instead of a Loading screen: server is set here so
+        // serverId() resolves and the cached grids can draw at once, while the socket connects behind them.
+        AuthHolder.token = cfg.token
+        _ui.update {
+            it.copy(
+                phase = Phase.Main, baseUrl = cfg.baseUrl, username = cfg.username, selectedPlayerId = cfg.playerId,
+                server = it.server ?: cfg.serverId?.let { id -> ServerInfo(serverId = id, name = cfg.serverName) },
+            )
+        }
         try {
             client.connect(cfg.baseUrl!!, cfg.token!!, cfg.serverId)
             afterConnected(cfg)
@@ -250,9 +280,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 startDiscovery()
             }
         } catch (e: Exception) {
-            // Server unreachable right now: keep trying quietly, show the Connect screen with a hint.
-            _ui.update { it.copy(phase = Phase.Connect, connectError = "Cannot reach ${cfg.serverName ?: cfg.baseUrl}: ${e.message}") }
-            startDiscovery()
+            // Server unreachable right now: stay on Main with the cached library already showing
+            // (from the update above) instead of bouncing to the Connect screen; keep trying quietly.
+            _ui.update { it.copy(connectError = "Cannot reach ${cfg.serverName ?: cfg.baseUrl}: ${e.message}") }
             retrySavedUntilUp(cfg)
         }
     }
@@ -260,7 +290,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun retrySavedUntilUp(cfg: SavedConfig) {
         viewModelScope.launch {
             var d = 3000L
-            while (isActive && _ui.value.phase == Phase.Connect && _ui.value.pendingServer == null) {
+            while (isActive && !client.isConnected && _ui.value.pendingServer == null) {
                 delay(d); d = (d * 2).coerceAtMost(20_000)
                 try {
                     client.connect(cfg.baseUrl!!, cfg.token!!, cfg.serverId)
@@ -370,10 +400,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun afterConnected(cfg: SavedConfig) {
         AuthHolder.token = cfg.token
-        albums.reset()
-        artists.reset()
-        playlists.reset()
-        radios.reset()
+        // Reconnecting to the same server (the common case: a saved login, a dropped socket) should
+        // leave a ready grid on screen and just refresh it behind the scenes; only a genuinely
+        // different server needs everything wiped, since its albums/artists are not ours to show.
+        val sameServer = client.serverInfo?.serverId != null && client.serverInfo?.serverId == _ui.value.server?.serverId
+        for (index in listOf(albums, artists, playlists, radios)) {
+            if (sameServer && index.state.value.ready) index.reload() else index.reset()
+        }
         _favourites.value = Favourites()
         _favOverrides.value = emptyMap()
         _folders.value = emptyList()
@@ -381,7 +414,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 phase = Phase.Main, loginBusy = false, loginError = null, pendingServer = null,
                 baseUrl = cfg.baseUrl, username = cfg.username, server = client.serverInfo,
-                selectedPlayerId = it.selectedPlayerId ?: cfg.playerId, connectError = null,
+                selectedPlayerId = it.selectedPlayerId ?: cfg.playerId, connectError = null, everConnected = true,
             )
         }
         // Restore the artist-cover lookups saved for this server so borrowed covers show at once
@@ -410,7 +443,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun onConnectionState(st: ConnectionState) {
         _ui.update { it.copy(connection = st, server = client.serverInfo ?: it.server) }
-        if (st is ConnectionState.Connected && _ui.value.phase == Phase.Main) {
+        // Main is now the phase from the moment a saved server is known, so this must not double up
+        // with afterConnected's own refresh on the first connect: only a *re*connect refreshes here.
+        if (st is ConnectionState.Connected && _ui.value.everConnected) {
             viewModelScope.launch { refreshAll() }
         }
         if (st is ConnectionState.Failed && st.fatal && _ui.value.phase == Phase.Main) {
@@ -458,7 +493,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 queues[id] = q.copy(elapsedTime = secs, elapsedTimeLastUpdated = System.currentTimeMillis() / 1000.0)
                 if (id == _ui.value.activeQueueId) recomputeNowPlaying()
             }
+            "media_item_added", "media_item_updated", "media_item_deleted" -> {
+                val mediaType = data.stringField("media_type")
+                if (mediaType == "album" || mediaType == "artist") scheduleLibraryReload()
+            }
             else -> Log.v(TAG, "event $event ignored")
+        }
+    }
+
+    /**
+     * A sync (or a single library edit) fires one media_item event per item, so wait for the burst
+     * to end before reloading the grids rather than reacting to every single one.
+     */
+    private fun scheduleLibraryReload() {
+        libraryReloadJob?.cancel()
+        libraryReloadJob = viewModelScope.launch {
+            delay(5_000)
+            albums.reload(); artists.reload(); recentAlbums.reload()
+            flash("Library updated")
         }
     }
 
@@ -518,6 +570,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun cmd(block: suspend () -> Unit) {
+        // withPlayer routes through here too, so this one check covers every remote command.
+        if (!client.isConnected) { flash("Still connecting…"); return }
         viewModelScope.launch {
             try { block() } catch (e: Exception) {
                 Log.w(TAG, "command failed: ${e.message}")
@@ -588,9 +642,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val step = 100 / TV_VOLUME_STEPS
         setVolume((current + direction * step).coerceIn(0, 100))
     }
-    fun shuffleOn() {
-        val q = _ui.value.activeQueueId ?: return
-        cmd { client.send("player_queues/shuffle", "queue_id" to q, "shuffle_enabled" to true) }
+    fun toggleShuffle() {
+        val qid = _ui.value.activeQueueId ?: return
+        val on = queues[qid]?.shuffleEnabled ?: false
+        cmd { client.setShuffle(qid, !on) }
+    }
+    fun cycleRepeat() {
+        val qid = _ui.value.activeQueueId ?: return
+        val next = when (queues[qid]?.repeatMode) { "all" -> "one"; "one" -> "off"; else -> "all" }
+        cmd { client.setRepeat(qid, next) }
+    }
+    fun seekTo(seconds: Double) {
+        val qid = _ui.value.activeQueueId ?: return
+        cmd { client.seek(qid, seconds.toInt().coerceAtLeast(0)) }
     }
     fun seekRelative(seconds: Int) {
         val q = _ui.value.activeQueueId ?: return
@@ -602,14 +666,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         cmd { block(id) }
     }
 
+    /** Resolves (and remembers) the active queue id for a player, looking it up if not already known. */
+    private suspend fun activeQueueIdFor(playerId: String): String =
+        _ui.value.activeQueueId ?: run { resolveActiveQueue(playerId); _ui.value.activeQueueId ?: playerId }
+
     /** Play a browsable item (album, playlist, artist, track) on the selected player's queue. */
     fun playItem(item: MediaItem, startFrom: MediaItem? = null, option: String = "replace") {
         val uri = item.uri ?: return
         val playerId = _ui.value.selectedPlayerId ?: run { flash("Choose a player first"); return }
         cmd {
-            val queueId = _ui.value.activeQueueId ?: run { resolveActiveQueue(playerId); _ui.value.activeQueueId ?: playerId }
+            val queueId = activeQueueIdFor(playerId)
+            // A plain Play must never inherit a shuffle left on from an earlier "Shuffle" pick.
+            if (option == "replace" && queues[queueId]?.shuffleEnabled == true) client.setShuffle(queueId, false)
             client.playMedia(queueId, listOf(uri), option, startFrom?.uri)
             flash("Playing ${item.name} on ${_ui.value.selectedPlayer?.name ?: "player"}")
+        }
+    }
+
+    /** Play a browsable item with shuffle forced on, from a long-press "Shuffle" action. */
+    fun playShuffled(item: MediaItem) {
+        val uri = item.uri ?: return
+        val playerId = _ui.value.selectedPlayerId ?: run { flash("Choose a player first"); return }
+        cmd {
+            val queueId = activeQueueIdFor(playerId)
+            client.setShuffle(queueId, true)
+            client.playMedia(queueId, listOf(uri), "replace")
+            flash("Shuffling ${item.name} on ${_ui.value.selectedPlayer?.name ?: "player"}")
         }
     }
 
@@ -620,7 +702,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------------ library
 
-    suspend fun library(kind: String, offset: Int, limit: Int): List<MediaItem> = client.libraryItems(kind, offset, limit)
     suspend fun children(item: MediaItem): List<MediaItem> = when (item.mediaType) {
         "artist" -> client.artistAlbums(item)
         "album" -> client.albumTracks(item)
@@ -765,32 +846,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * Refresh means "go and look again": the server only walks the filesystem on its own schedule —
      * twice a day for the local disk — so a folder added five minutes ago is invisible until it
-     * does. The folder list redraws at once; the sync runs behind it and the library reloads only
-     * if the album count actually moves.
+     * does. The folder list redraws at once; the sync runs behind it and the library grids reload
+     * themselves once the resulting media_item events land (see [onEvent]).
      */
     fun reloadFolders() {
         _folders.value = emptyList()
         openFolder(null)
-        cmd {
-            val before = client.albumsCount()
-            flash("Rescanning library…")
-            client.startSync()
-            var after = before
-            for (i in 1..12) {
-                kotlinx.coroutines.delay(2500)
-                after = client.albumsCount() ?: after
-                if (before != null && after != null && after != before) break
-            }
-            val added = if (before != null && after != null) after - before else 0
-            if (added == 0) { flash("Library is up to date"); return@cmd }
-            albums.reload()
-            artists.reload()
-            playlists.reload()
-            radios.reload()
-            _folders.value = emptyList()
-            openFolder(null)
-            flash("Found $added new album${if (added == 1) "" else "s"}")
-        }
+        cmd { client.startSync(); flash("Rescanning library…") }
     }
 
     /** Push a level and load it. `null` loads the root (one entry per provider). */
@@ -833,7 +895,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (uris.isEmpty()) return
         val playerId = _ui.value.selectedPlayerId ?: run { flash("Choose a player first"); return }
         cmd {
-            val queueId = _ui.value.activeQueueId ?: run { resolveActiveQueue(playerId); _ui.value.activeQueueId ?: playerId }
+            val queueId = activeQueueIdFor(playerId)
+            if (queues[queueId]?.shuffleEnabled == true) client.setShuffle(queueId, false)
             client.playMedia(queueId, uris, "replace")
             flash("Playing ${start.name} on ${_ui.value.selectedPlayer?.name ?: "player"}")
         }

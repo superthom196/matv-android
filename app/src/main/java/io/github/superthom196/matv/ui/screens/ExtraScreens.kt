@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -178,6 +179,13 @@ fun SettingsScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
             Text("OK selects a player. Long-press to sync it with the selected one.", style = MaterialTheme.typography.bodySmall, color = HiFiColors.Muted)
             VSpace(10.dp)
             SectionLabel("Library")
+            SettingRow("Rescan library", "Ask Music Assistant to look for new files") { vm.rescanLibrary() }
+            val scan by vm.albumScan.scan.collectAsStateWithLifecycle()
+            SettingRow("Hi-res scan", if (scan.running) "${scan.done} of ${scan.total} albums checked" else if (scan.total > 0) "Done: ${scan.total} albums checked" else "Up to date") { }
+            // Clearing drops the cache and reloads; the byte count shown here won't reflect that
+            // until the screen is reopened, since produceState only reads it once on entry.
+            val cacheBytes by produceState(0L) { value = vm.libraryCacheBytes() }
+            SettingRow("Library cache", "${cacheBytes / 1024} KB  ·  OK clears and reloads") { vm.clearLibraryCache() }
             // "Open on" only cycles through tabs that are actually showing.
             val shown = s.tabs
             SettingRow("Open on", shown.firstOrNull { it.first == s.defaultTab }?.second ?: shown.first().second) {

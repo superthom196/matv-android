@@ -93,7 +93,9 @@ fun AppRoot(vm: AppViewModel) {
         // After a few seconds of not being connected, take over the screen with a proper explanation.
         if (ui.phase == Phase.Main && conn !is ConnectionState.Connected) {
             var stale by remember { mutableStateOf(conn is ConnectionState.Failed) }
-            LaunchedEffect(conn) { if (conn !is ConnectionState.Failed) { stale = false; delay(5000) }; stale = true }
+            // The first connect happens behind the cached library, so give it longer before taking
+            // over the screen; after a connection has been lost, five seconds is right.
+            LaunchedEffect(conn) { if (conn !is ConnectionState.Failed) { stale = false; delay(if (ui.everConnected) 5000 else 20000) }; stale = true }
             if (stale) ConnectionOverlay(vm, ui)
         }
         // Transient message (command feedback, errors).

@@ -5,6 +5,7 @@ import io.github.superthom196.matv.ma.MediaItem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,7 +34,7 @@ private const val TAG = "AlbumIndex"
 /**
  * The whole Albums library, sorted by artist and indexed by letter.
  * Offset pagination and a client-side re-sort don't mix, so this loads everything up front
- * instead of paging like [LibraryStore] does for artists/folders.
+ * instead of paging like folders do on their own.
  */
 class AlbumIndex(
     private val scope: CoroutineScope,
@@ -49,6 +50,11 @@ class AlbumIndex(
     val state: StateFlow<AlbumsByArtist> = _state.asStateFlow()
     private var job: Job? = null
 
+    /** Backoff for retrying a failed refresh while a cached list stays on screen: 30s, 60s, 120s, then give up. */
+    private var retryJob: Job? = null
+    private var retryCount = 0
+    private val retryDelaysMs = longArrayOf(30_000, 60_000, 120_000)
+
     fun ensureLoaded() {
         val cur = _state.value
         if (cur.ready || cur.loading) return
@@ -59,6 +65,7 @@ class AlbumIndex(
 
     private fun load(useCache: Boolean) {
         job?.cancel()
+        retryJob?.cancel()
         val cur = _state.value
         _state.value = if (cur.ready) cur.copy(loading = true, error = null) else AlbumsByArtist(loading = true)
         job = scope.launch {
@@ -89,6 +96,7 @@ class AlbumIndex(
                 val tFetch = System.currentTimeMillis()
                 val (sorted, anchors) = withContext(Dispatchers.Default) { buildAlbumIndex(all, sortKey) }
                 val tSort = System.currentTimeMillis()
+                retryCount = 0 // a good refresh clears any backoff from an earlier failure
                 val changed = shown == null || shown != sorted
                 if (changed) {
                     _state.value = AlbumsByArtist(items = sorted, anchors = anchors, ready = true, loaded = sorted.size, total = total)
@@ -103,15 +111,27 @@ class AlbumIndex(
                 if (shown == null) {
                     _state.update { it.copy(loading = false, error = e.message ?: "Failed to load albums") }
                 } else {
-                    // Server refresh failed but the cached list is already on screen: stay quiet and usable.
+                    // Server refresh failed but the cached list is already on screen: stay quiet and usable,
+                    // and keep trying behind the scenes in case it was a blip.
                     _state.update { it.copy(loading = false) }
+                    scheduleRetry(e.message)
                 }
             }
         }
     }
 
+    private fun scheduleRetry(message: String?) {
+        if (retryCount >= retryDelaysMs.size) return
+        val delayMs = retryDelaysMs[retryCount]
+        retryCount++
+        Log.i(TAG, "$name: refresh failed ($message), retry in ${delayMs / 1000} s")
+        retryJob = scope.launch { delay(delayMs); load(useCache = false) }
+    }
+
     fun reset() {
         job?.cancel()
+        retryJob?.cancel()
+        retryCount = 0
         _state.value = AlbumsByArtist()
     }
 }
@@ -186,14 +206,3 @@ internal fun indexForLetter(anchors: List<LetterAnchor>, label: String): Int {
 /** The letter the grid is currently showing, given the topmost visible item's index. */
 internal fun labelAtIndex(anchors: List<LetterAnchor>, index: Int): String =
     anchors.lastOrNull { it.index <= index }?.label ?: anchors.firstOrNull()?.label ?: "A"
-
-/** Previous/next populated letter from wherever the grid is now (snaps to the start of the current run first). */
-internal fun stepAnchor(anchors: List<LetterAnchor>, currentIndex: Int, forward: Boolean): Int? {
-    if (anchors.isEmpty()) return null
-    val currentPos = anchors.indexOfLast { it.index <= currentIndex }.coerceAtLeast(0)
-    return if (forward) {
-        anchors.getOrNull(currentPos + 1)?.index
-    } else {
-        if (currentIndex > anchors[currentPos].index) anchors[currentPos].index else anchors.getOrNull(currentPos - 1)?.index
-    }
-}

@@ -19,7 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAdd
@@ -115,7 +115,7 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
             // Play carries the label; the rest are icon-only circles so the column reads as one row.
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 PillButton("Play", onClick = { vm.playItem(item) }, icon = Icons.Default.PlayArrow, primary = true, modifier = Modifier.focusRequester(playFocus))
-                RoundIconButton(Icons.Default.Shuffle, "Shuffle", onClick = { vm.playItem(item, option = "replace"); vm.shuffleOn() }, size = 48.dp)
+                RoundIconButton(Icons.Default.Shuffle, "Shuffle", onClick = { vm.playShuffled(item) }, size = 48.dp)
                 RoundIconButton(Icons.Default.QueueMusic, "Play next", onClick = { vm.playItem(item, option = "next") }, size = 48.dp)
                 RoundIconButton(Icons.Default.PlaylistAdd, "Add to queue", onClick = { vm.playItem(item, option = "add") }, size = 48.dp)
                 RoundIconButton(
@@ -140,14 +140,44 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
                         MediaCard(album, vm.imageUrl(album, 256), onClick = { nav.push(MainScreen.Detail(album)) }, hiRes = AlbumScan.marks(album, hiResAlbums))
                     }
                 }
-                else -> LazyColumn(contentPadding = PaddingValues(top = 4.dp, bottom = 48.dp), verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxSize().focusRestorer()) {
-                    itemsIndexed(children!!, key = { i, t -> "$i:${t.provider}:${t.itemId}" }) { i, track ->
-                        TrackRow(i + 1, track, showArtist = item.mediaType == "playlist", onClick = { vm.playItem(item, startFrom = track) }, onLongClick = { menuFor = track })
+                else -> {
+                    // Multi-disc albums get a "Disc N" header before each disc's first track; single-disc
+                    // albums (or ones missing disc numbers) show a plain track list, as before.
+                    val entries = remember(children) {
+                        val list = children!!
+                        val multiDisc = list.mapNotNull { it.discNumber }.distinct().size > 1
+                        var lastDisc: Int? = null
+                        buildList {
+                            list.forEachIndexed { i, t ->
+                                if (multiDisc && t.discNumber != null && t.discNumber != lastDisc) {
+                                    add(TrackEntry.Header(t.discNumber))
+                                    lastDisc = t.discNumber
+                                }
+                                add(TrackEntry.Track(i, t))
+                            }
+                        }
+                    }
+                    LazyColumn(contentPadding = PaddingValues(top = 4.dp, bottom = 48.dp), verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxSize().focusRestorer()) {
+                        items(entries, key = { e -> when (e) { is TrackEntry.Header -> "disc:${e.disc}"; is TrackEntry.Track -> "${e.index}:${e.item.provider}:${e.item.itemId}" } }) { e ->
+                            when (e) {
+                                is TrackEntry.Header -> Text(
+                                    "Disc ${e.disc}", style = MaterialTheme.typography.labelMedium, color = HiFiColors.Muted,
+                                    modifier = Modifier.padding(start = 18.dp, top = 10.dp, bottom = 2.dp),
+                                )
+                                is TrackEntry.Track -> TrackRow(e.index + 1, e.item, showArtist = item.mediaType == "playlist", onClick = { vm.playItem(item, startFrom = e.item) }, onLongClick = { menuFor = e.item })
+                            }
+                        }
                     }
                 }
             }
         }
     }
+}
+
+/** One row in the track list: a disc-boundary header, or a track at its position in `children`. */
+private sealed class TrackEntry {
+    data class Header(val disc: Int) : TrackEntry()
+    data class Track(val index: Int, val item: MediaItem) : TrackEntry()
 }
 
 @Composable

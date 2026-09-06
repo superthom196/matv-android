@@ -378,6 +378,10 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
     suspend fun deleteQueueItem(queueId: String, queueItemId: String) { send("player_queues/delete_item", "queue_id" to queueId, "item_id_or_index" to queueItemId) }
     suspend fun clearQueue(queueId: String) { send("player_queues/clear", "queue_id" to queueId) }
 
+    suspend fun setShuffle(queueId: String, enabled: Boolean) { send("player_queues/shuffle", "queue_id" to queueId, "shuffle_enabled" to enabled) }
+    suspend fun setRepeat(queueId: String, mode: String) { send("player_queues/repeat", "queue_id" to queueId, "repeat_mode" to mode) }
+    suspend fun seek(queueId: String, positionSeconds: Int) { send("player_queues/seek", "queue_id" to queueId, "position" to positionSeconds) }
+
     suspend fun groupPlayer(playerId: String, targetPlayer: String) { send("players/cmd/group", "player_id" to playerId, "target_player" to targetPlayer) }
     suspend fun ungroupPlayer(playerId: String) { send("players/cmd/ungroup", "player_id" to playerId) }
 

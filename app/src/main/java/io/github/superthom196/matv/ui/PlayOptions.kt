@@ -109,7 +109,7 @@ fun PlayOptionsMenu(vm: AppViewModel, item: MediaItem, onDismiss: () -> Unit, pl
             add(MenuAction("Play now", Icons.Default.PlayArrow) { playNow?.invoke() ?: vm.playItem(item) })
             add(MenuAction("Play next", Icons.Default.QueueMusic) { vm.playItem(item, option = "next") })
             add(MenuAction("Add to queue", Icons.Default.PlaylistAdd) { vm.playItem(item, option = "add") })
-            if (item.mediaType in setOf("album", "artist", "playlist", "folder")) add(MenuAction("Shuffle", Icons.Default.Shuffle) { vm.playItem(item); vm.shuffleOn() })
+            if (item.mediaType in setOf("album", "artist", "playlist", "folder")) add(MenuAction("Shuffle", Icons.Default.Shuffle) { vm.playShuffled(item) })
         }
         if (item.mediaType in setOf("artist", "album", "track", "playlist", "radio")) {
             add(MenuAction(if (fav) "Remove from favourites" else "Add to favourites", if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder) { vm.toggleFavourite(item) })

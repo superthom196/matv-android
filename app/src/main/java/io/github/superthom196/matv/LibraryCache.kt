@@ -68,6 +68,11 @@ class LibraryCache(context: Context) {
         withContext(Dispatchers.IO) { dir.deleteRecursively() }
     }
 
+    /** Total size of everything cached, for the Settings screen's "Clear cache" readout. */
+    suspend fun sizeBytes(): Long = withContext(Dispatchers.IO) {
+        dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+    }
+
     private suspend fun readFile(name: String): String? = withContext(Dispatchers.IO) {
         val f = File(dir, name)
         if (!f.isFile) null else runCatching { f.readText() }.onFailure { Log.w(TAG, "read $name: ${it.message}") }.getOrNull()
