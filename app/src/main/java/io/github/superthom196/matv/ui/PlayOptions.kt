@@ -40,7 +40,6 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import io.github.superthom196.matv.AppViewModel
-import kotlinx.coroutines.delay
 import io.github.superthom196.matv.ma.MediaItem
 
 /** A row in a small action menu. */
@@ -51,23 +50,22 @@ data class MenuAction(val label: String, val icon: ImageVector? = null, val dang
 fun ActionMenu(title: String, subtitle: String? = null, actions: List<MenuAction>, onDismiss: () -> Unit) {
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
-    // The menu opens on the long-press *down*; the matching key-up would otherwise click the first
-    // row. Swallow OK/Enter key-ups until a fresh key-down has been seen inside the menu.
-    var armed by remember { mutableStateOf(false) }
-    // That guard only sees the key-up if the dialog already holds focus. Release OK soon after the
-    // menu appears and the up is routed before that happens, which picked a row on its own. So also
-    // ignore any pick made in the first moments — far quicker than a person choosing one.
-    var ready by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { delay(350); ready = true }
+    // A pick only counts once this menu has seen OK go *down* inside it. The press that opened the
+    // menu had its down before the menu existed, so its stray key-up cannot pick anything — however
+    // long the button was held. A timer cannot do this job: hold for a second and any window passes.
+    var sawKeyDown by remember { mutableStateOf(false) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             Modifier
                 .width(420.dp)
                 .onPreviewKeyEvent { ev ->
-                    if (armed) return@onPreviewKeyEvent false
-                    if (ev.type == KeyEventType.KeyDown) { armed = true; false }
-                    else if (ev.key == Key.DirectionCenter || ev.key == Key.Enter || ev.key == Key.NumPadEnter) { armed = true; true }
-                    else false
+                    val isOk = ev.key == Key.DirectionCenter || ev.key == Key.Enter || ev.key == Key.NumPadEnter
+                    when {
+                        ev.type == KeyEventType.KeyDown -> { sawKeyDown = true; false }
+                        // the opening press's release: swallow it rather than let it choose a row
+                        isOk && !sawKeyDown -> true
+                        else -> false
+                    }
                 }
                 .background(HiFiColors.Surface, RoundedCornerShape(18.dp)).padding(20.dp),
         ) {
@@ -76,7 +74,7 @@ fun ActionMenu(title: String, subtitle: String? = null, actions: List<MenuAction
             VSpace(12.dp)
             actions.forEachIndexed { i, a ->
                 FocusSurface(
-                    onClick = { if (ready) { onDismiss(); a.onPick() } },
+                    onClick = { if (sawKeyDown) { onDismiss(); a.onPick() } },
                     modifier = (if (i == 0) Modifier.focusRequester(first) else Modifier).fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp), container = HiFiColors.Surface, scale = 1.0f,
                 ) {

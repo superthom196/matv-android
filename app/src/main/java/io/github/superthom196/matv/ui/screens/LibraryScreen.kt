@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -162,6 +163,9 @@ fun openOrPlay(vm: AppViewModel, nav: Nav, item: MediaItem) {
 private data class JumpRequest(val index: Int, val token: Long)
 
 /** Artists and Albums share this: the whole library loaded once, sorted, with the A-Z rail on the left. */
+/** Height of a shelf, so an empty one still reserves its place. */
+private val ROW_HEIGHT = 206.dp
+
 /** One horizontal shelf of albums above the A-Z grid. Pages in more as it nears its end. */
 @Composable
 private fun AlbumRow(
@@ -177,6 +181,14 @@ private fun AlbumRow(
     LaunchedEffect(lastVisible) { onNearEnd(lastVisible) }
     Column(Modifier.padding(bottom = 10.dp)) {
         SectionLabel(title, Modifier.padding(start = 8.dp, bottom = 4.dp))
+        if (items.isEmpty()) {
+            // Hold the space, so the row above does not jump when this one arrives.
+            Box(Modifier.fillMaxWidth().height(ROW_HEIGHT), contentAlignment = Alignment.CenterStart) {
+                Text("Loading…", style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted,
+                    modifier = Modifier.padding(start = 8.dp))
+            }
+            return@Column
+        }
         LazyRow(
             state = rowState,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -222,10 +234,7 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
     LaunchedEffect(showTopRows) { if (showTopRows) vm.recentAlbums.ensureLoaded() }
     // Seeded in the view model, so the order holds while you browse in and out of albums.
     val shuffled = remember(state.items, showTopRows) { if (showTopRows) vm.shuffledAlbums(state.items) else emptyList() }
-    val topRows = if (!showTopRows) emptyList() else listOfNotNull(
-        ("Latest" to recent).takeIf { recent.isNotEmpty() },
-        ("Random" to shuffled).takeIf { shuffled.isNotEmpty() },
-    )
+    val topRows = if (!showTopRows) emptyList() else listOf("Latest" to recent, "Random" to shuffled)
     val headers = topRows.size
 
     val gridState = rememberLazyGridState()
@@ -279,7 +288,8 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
             columns = GridCells.Fixed(columns),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
-            contentPadding = PaddingValues(bottom = 48.dp, top = 6.dp),
+            // The focused card grows 5%; without room on the left its ring is clipped by the rail.
+            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 48.dp, top = 6.dp),
             modifier = Modifier
                 .fillMaxSize()
                 .focusRestorer()
