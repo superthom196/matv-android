@@ -2,9 +2,12 @@
 
 package io.github.superthom196.matv.ui
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +20,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -32,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
@@ -170,10 +178,48 @@ fun Artwork(url: String?, modifier: Modifier = Modifier, corner: androidx.compos
     }
 }
 
+/**
+ * A lighter-weight stand-in for [FocusSurface], used only for grid tiles ([MediaCard]).
+ *
+ * tv-material's `Surface` sets up an interaction source, indication, glow, border, shape and
+ * scale-animation machinery for every instance. Multiplied across a 6-column album grid on this
+ * TV's slow two-core CPU, that per-tile composition cost — not image decoding — is what
+ * `dumpsys gfxinfo` showed as scroll jank (~97% janky frames). This reproduces the same
+ * ring-and-grow focus treatment with a plain clickable `Box`.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun GridTile(
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
+    modifier: Modifier,
+    content: @Composable () -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (focused) 1.05f else 1f, label = "tileScale")
+    val shape = RoundedCornerShape(14.dp)
+    Box(
+        // Order matters: the caller's `modifier` (grid focusRequester/onFocusChanged) must stay
+        // outermost so it still sees focus changes first; combinedClickable is the node that
+        // actually becomes focusable and receives D-pad center/Enter (and long-press), so our own
+        // focus tracking goes just before it; the background/border decoration reacts to that
+        // state and is innermost since it only paints, it doesn't need to be focusable itself.
+        modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .onFocusChanged { focused = it.isFocused }
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick, interactionSource = null, indication = null)
+            .then(if (focused) Modifier.background(HiFiColors.SurfaceHigh, shape) else Modifier)
+            .then(if (focused) Modifier.border(2.dp, HiFiColors.Focus, shape) else Modifier),
+        propagateMinConstraints = false,
+    ) {
+        content()
+    }
+}
+
 /** Library grid tile: artwork, name, subtitle. */
 @Composable
 fun MediaCard(item: MediaItem, imageUrl: String?, onClick: () -> Unit, modifier: Modifier = Modifier, round: Boolean = false, onLongClick: (() -> Unit)? = null, hiRes: Boolean = false) {
-    FocusSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier, container = Color.Transparent, focusedContainer = HiFiColors.SurfaceHigh, scale = 1.05f) {
+    GridTile(onClick = onClick, onLongClick = onLongClick, modifier = modifier) {
         // Square artwork fills the column, so its captions line up left. A circle is inset from the
         // column edges, which leaves left-aligned text looking detached from it — centre those.
         val align = if (round) TextAlign.Center else TextAlign.Start
@@ -196,19 +242,28 @@ fun MediaCard(item: MediaItem, imageUrl: String?, onClick: () -> Unit, modifier:
 }
 
 /**
- * The app's wordmark: the Music Assistant house followed by "TV". The logo already reads MA, so
- * spelling out "MATV" beside it would say it twice. One definition, used by the header, the splash
- * and the connect screen.
+ * The app's wordmark: the Music Assistant house followed by "TV", in the launcher banner's
+ * proportions — the caps of "TV" stand exactly as tall as the house, with a gap of about a fifth
+ * of that. Roboto's cap height is 0.711 em, so the font size follows from the logo size. The text
+ * box (ascent + descent) is taller than the caps, so it is centred on the logo and allowed to
+ * overflow its slot rather than making the header row grow. One definition, used by the header,
+ * the splash and the connect screen.
  */
 @Composable
-fun Wordmark(logoSize: Dp = 30.dp, fontSize: TextUnit = 30.sp, modifier: Modifier = Modifier) {
+fun Wordmark(logoSize: Dp = 30.dp, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Image(painterResource(R.drawable.logo_ma), contentDescription = "MATV", modifier = Modifier.size(logoSize))
-        HSpace(logoSize * 0.23f)
+        HSpace(logoSize * 0.19f)
+        val fontSize = (logoSize.value / 0.711f).sp
         Text(
             "TV",
-            style = MaterialTheme.typography.headlineLarge.copy(fontSize = fontSize, fontWeight = FontWeight.Bold),
-            color = HiFiColors.Accent,
+            style = MaterialTheme.typography.headlineLarge.copy(
+                fontSize = fontSize, lineHeight = fontSize, fontWeight = FontWeight.Bold,
+                platformStyle = PlatformTextStyle(includeFontPadding = false),
+                lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+            ),
+            color = HiFiColors.Accent, maxLines = 1, softWrap = false,
+            modifier = Modifier.requiredHeight(logoSize).wrapContentHeight(Alignment.CenterVertically, unbounded = true),
         )
     }
 }

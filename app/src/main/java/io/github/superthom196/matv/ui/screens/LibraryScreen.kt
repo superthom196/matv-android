@@ -244,7 +244,8 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
     // Seeded in the view model, so the order holds while you browse in and out of albums.
     val shuffled = remember(state.items, showTopRows) { if (showTopRows) vm.shuffledAlbums(state.items) else emptyList() }
     val topRows = if (!showTopRows) emptyList() else listOf("Latest" to recent, "Random" to shuffled)
-    val headers = topRows.size
+    // Latest and Random shelves, plus the "Collection" label that names the A-Z grid below them.
+    val headers = if (showTopRows) topRows.size + 1 else 0
 
     val gridState = rememberLazyGridState()
     var menuFor by remember { mutableStateOf<MediaItem?>(null) }
@@ -314,6 +315,11 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
                     AlbumRow(vm, nav, title, items, hiResAlbums, onNearEnd = { last ->
                         if (title == "Latest") vm.recentAlbums.ensureLoaded(last)
                     })
+                }
+            }
+            if (showTopRows) {
+                item(span = { GridItemSpan(maxLineSpan) }, key = "row:Collection") {
+                    SectionLabel("Collection", Modifier.padding(bottom = 4.dp))
                 }
             }
             itemsIndexed(state.items, key = { _, it -> "${it.provider}:${it.itemId}" }) { index, item ->

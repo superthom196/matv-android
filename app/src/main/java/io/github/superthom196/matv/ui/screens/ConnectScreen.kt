@@ -44,7 +44,7 @@ import io.github.superthom196.matv.ui.Wordmark
 fun LoadingScreen(ui: UiState) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Wordmark(logoSize = 48.dp, fontSize = 48.sp)
+            Wordmark(logoSize = 48.dp)
             VSpace(16.dp)
             Text("Connecting to ${ui.baseUrl ?: "Music Assistant"}…", style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted)
         }
@@ -59,7 +59,7 @@ fun ConnectScreen(vm: AppViewModel, ui: UiState) {
 
     Row(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 32.dp)) {
         Column(Modifier.width(520.dp)) {
-            Wordmark(logoSize = 48.dp, fontSize = 48.sp)
+            Wordmark(logoSize = 48.dp)
             VSpace(8.dp)
             Text("A big-screen remote for Music Assistant.", style = MaterialTheme.typography.bodyLarge, color = HiFiColors.Muted)
             VSpace(40.dp)
