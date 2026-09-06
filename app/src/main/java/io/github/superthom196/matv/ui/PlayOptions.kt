@@ -61,7 +61,11 @@ fun ActionMenu(title: String, subtitle: String? = null, actions: List<MenuAction
                 .onPreviewKeyEvent { ev ->
                     val isOk = ev.key == Key.DirectionCenter || ev.key == Key.Enter || ev.key == Key.NumPadEnter
                     when {
-                        ev.type == KeyEventType.KeyDown -> { sawKeyDown = true; false }
+                        // Holding a key repeats ACTION_DOWN. Those repeats belong to the press that
+                        // opened this menu, so only a fresh press — repeatCount 0 — counts, and the
+                        // repeats are swallowed so nothing downstream sees them either.
+                        ev.type == KeyEventType.KeyDown && ev.nativeKeyEvent.repeatCount == 0 -> { sawKeyDown = true; false }
+                        ev.type == KeyEventType.KeyDown -> true
                         // the opening press's release: swallow it rather than let it choose a row
                         isOk && !sawKeyDown -> true
                         else -> false
