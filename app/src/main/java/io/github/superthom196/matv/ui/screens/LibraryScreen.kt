@@ -185,13 +185,16 @@ private fun AlbumRow(
             // Hold the space, so the row above does not jump when this one arrives.
             Box(Modifier.fillMaxWidth().height(ROW_HEIGHT), contentAlignment = Alignment.CenterStart) {
                 Text("Loading…", style = MaterialTheme.typography.bodyMedium, color = HiFiColors.Muted,
-                    modifier = Modifier.padding(start = 8.dp))
+                    modifier = Modifier.padding(start = 16.dp))
             }
             return@Column
         }
         LazyRow(
             state = rowState,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
+            // Same reason as the grid: the focused card grows, and without room the first card's
+            // ring is sliced off against the row's own edge.
+            contentPadding = PaddingValues(horizontal = 8.dp),
             modifier = Modifier.fillMaxWidth().focusRestorer(),
         ) {
             items(items, key = { "$title:${it.provider}:${it.itemId}" }) { item ->
