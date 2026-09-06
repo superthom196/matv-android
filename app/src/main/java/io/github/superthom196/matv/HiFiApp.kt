@@ -25,7 +25,11 @@ class HiFiApp : Application(), SingletonImageLoader.Factory {
             }
             .build()
         return ImageLoader.Builder(context)
-            .components { add(OkHttpNetworkFetcherFactory(callFactory = { http })) }
+            .components {
+                add(OkHttpNetworkFetcherFactory(callFactory = { http }))
+                // Music Assistant ships its genre artwork as SVG; without this those tiles come back blank.
+                add(coil3.svg.SvgDecoder.Factory())
+            }
             .crossfade(true)
             .build()
     }

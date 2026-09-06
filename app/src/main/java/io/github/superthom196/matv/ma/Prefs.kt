@@ -32,6 +32,7 @@ data class AppSettings(
     val showAlbums: Boolean = true,
     val showFolders: Boolean = true,
     val showFavourites: Boolean = true,
+    val showGenres: Boolean = true,
     val showPlaylists: Boolean = false,
     val showRadio: Boolean = false,
 ) {
@@ -45,6 +46,7 @@ data class AppSettings(
             if (showAlbums) "albums" to "Albums" else null,
             if (showFolders) "folders" to "Folders" else null,
             if (showFavourites) "favourites" to "Favourites" else null,
+            if (showGenres) "genres" to "Genres" else null,
             if (showPlaylists) "playlists" to "Playlists" else null,
             if (showRadio) "radio" to "Radio" else null,
         ).ifEmpty { listOf("artists" to "Artists") }
@@ -57,6 +59,7 @@ class Prefs(private val context: Context) {
         val showAlbums = booleanPreferencesKey("show_albums")
         val showFolders = booleanPreferencesKey("show_folders")
         val showFavourites = booleanPreferencesKey("show_favourites")
+        val showGenres = booleanPreferencesKey("show_genres")
         val showPlaylists = booleanPreferencesKey("show_playlists")
         val showRadio = booleanPreferencesKey("show_radio")
         val baseUrl = stringPreferencesKey("base_url")
@@ -91,6 +94,7 @@ class Prefs(private val context: Context) {
             showAlbums = p[K.showAlbums] ?: true,
             showFolders = p[K.showFolders] ?: true,
             showFavourites = p[K.showFavourites] ?: true,
+            showGenres = p[K.showGenres] ?: true,
             showPlaylists = p[K.showPlaylists] ?: false,
             showRadio = p[K.showRadio] ?: false,
         )
@@ -101,6 +105,7 @@ class Prefs(private val context: Context) {
             it[K.defaultTab] = s.defaultTab
             it[K.showArtists] = s.showArtists; it[K.showAlbums] = s.showAlbums
             it[K.showFolders] = s.showFolders; it[K.showFavourites] = s.showFavourites
+            it[K.showGenres] = s.showGenres
             it[K.showPlaylists] = s.showPlaylists; it[K.showRadio] = s.showRadio
         }
     }

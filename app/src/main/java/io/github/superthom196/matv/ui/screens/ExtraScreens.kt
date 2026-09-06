@@ -201,6 +201,9 @@ fun SettingsScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
             SettingRow("Favourites tab", if (s.showFavourites) "On" else "Off") {
                 toggleTab(s.showFavourites, "Favourites") { it.copy(showFavourites = !it.showFavourites) }
             }
+            SettingRow("Genres tab", if (s.showGenres) "On" else "Off") {
+                toggleTab(s.showGenres, "Genres") { it.copy(showGenres = !it.showGenres) }
+            }
             SettingRow("Playlists tab", if (s.showPlaylists) "On" else "Off") {
                 toggleTab(s.showPlaylists, "Playlists") { it.copy(showPlaylists = !it.showPlaylists) }
             }

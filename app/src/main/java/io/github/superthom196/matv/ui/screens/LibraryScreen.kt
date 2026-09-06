@@ -100,6 +100,7 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
         when (kind) {
             "albums" -> vm.albums.ensureLoaded()
             "artists" -> vm.artists.ensureLoaded()
+            "genres" -> vm.genres.ensureLoaded()
             "playlists" -> vm.playlists.ensureLoaded()
             "radio" -> vm.radios.ensureLoaded()
             "favourites" -> vm.ensureFavouritesLoaded()
@@ -137,6 +138,7 @@ fun LibraryScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
             "albums" -> IndexedGrid(vm, nav, vm.albums, columns = 6, round = false, loadingText = "Sorting your albums by artist…", onBackToTop = { runCatching { tabFocus.requestFocus() } }, showTopRows = true)
             "playlists" -> IndexedGrid(vm, nav, vm.playlists, columns = 6, round = false, loadingText = "Loading playlists…", onBackToTop = { runCatching { tabFocus.requestFocus() } })
             "radio" -> IndexedGrid(vm, nav, vm.radios, columns = 6, round = false, loadingText = "Loading radio stations…", onBackToTop = { runCatching { tabFocus.requestFocus() } })
+            "genres" -> IndexedGrid(vm, nav, vm.genres, columns = 6, round = false, loadingText = "Loading genres…", onBackToTop = { runCatching { tabFocus.requestFocus() } })
             "favourites" -> FavouritesTab(vm, nav)
             else -> IndexedGrid(vm, nav, vm.artists, columns = 7, round = true, loadingText = "Sorting your artists…", onBackToTop = { runCatching { tabFocus.requestFocus() } })
         }

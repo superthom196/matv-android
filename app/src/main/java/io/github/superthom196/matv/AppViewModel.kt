@@ -120,6 +120,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val artists = AlbumIndex(viewModelScope, count = { client.artistsCount() }, fetch = { off, lim -> client.libraryItems("artists", off, lim) }, sortKey = ::artistNameKey)
     val playlists = AlbumIndex(viewModelScope, count = { client.libraryCount("playlists") }, fetch = { off, lim -> client.libraryItems("playlists", off, lim) }, sortKey = ::artistNameKey)
     val radios = AlbumIndex(viewModelScope, count = { client.libraryCount("radios") }, fetch = { off, lim -> client.libraryItems("radios", off, lim) }, sortKey = ::artistNameKey)
+    val genres = AlbumIndex(viewModelScope, count = { client.libraryCount("genres") }, fetch = { off, lim -> client.libraryItems("genres", off, lim) }, sortKey = ::artistNameKey)
 
     /**
      * Seed for the Random row, fixed for the life of the app. Reshuffling on every recomposition
