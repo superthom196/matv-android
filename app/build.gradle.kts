@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -8,6 +10,24 @@ val gitCommitCount = providers.exec { commandLine("git", "rev-list", "--count", 
     .standardOutput.asText.map { it.trim().toIntOrNull() ?: 1 }
 val gitDescribe = providers.exec { commandLine("git", "describe", "--tags", "--dirty", "--always") }
     .standardOutput.asText.map { it.trim().removePrefix("v").ifBlank { "0.0.0" } }
+
+// The release signing key. CI passes it through the environment; locally an optional
+// signing.properties (gitignored) does the same job, so a build from this machine and a build
+// from Actions install over each other instead of colliding. With neither, release stays
+// debug-signed exactly as it always was.
+val signingProps: Properties? =
+    rootProject.file("signing.properties").takeIf { it.exists() }?.let { f ->
+        val props = Properties()
+        f.inputStream().use { stream -> props.load(stream) }
+        props
+    }
+fun signingValue(env: String, prop: String): String? =
+    providers.environmentVariable(env).orNull ?: signingProps?.getProperty(prop)
+
+val keystorePath = signingValue("MATV_KEYSTORE_PATH", "storeFile")
+val keystorePassword = signingValue("MATV_KEYSTORE_PASSWORD", "storePassword")
+val keystoreAlias = signingValue("MATV_KEY_ALIAS", "keyAlias")
+val keystoreKeyPassword = signingValue("MATV_KEY_PASSWORD", "keyPassword")
 
 android {
     namespace = "io.github.superthom196.matv"
@@ -25,12 +45,24 @@ android {
         versionName = gitDescribe.get()
     }
 
+    signingConfigs {
+        if (keystorePath != null) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = keystorePassword
+                keyAlias = keystoreAlias
+                keyPassword = keystoreKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // Debug-signed so it side-loads like the debug build; minified so it starts fast on a slow TV CPU.
+            // Signed with the release key when one is configured, debug-signed otherwise; either way
+            // it side-loads. Minified so it starts fast on a slow TV CPU.
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

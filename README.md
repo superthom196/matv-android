@@ -5,6 +5,16 @@
 account, browse the library, drive playback from the sofa. Controller only: audio
 plays on your existing Music Assistant endpoints.
 
+![Artists, the default tab: circular artwork borrowed from album covers, A-Z rail down the left](docs/screenshots/artists.png)
+
+![Albums: Latest and Random shelves above the A-Z collection grid, hi-res albums marked HR](docs/screenshots/library.png)
+
+![An album page: format under the artist and year, one action row, disc headers in the track list](docs/screenshots/album.png)
+
+![Now Playing: artwork, source format, progress and transport](docs/screenshots/now-playing.png)
+
+Shot on a Sony BRAVIA at 1920x1080.
+
 ## Install
 
 This repo is private, so there is no public download link. Get `app-release.apk` one of
@@ -65,8 +75,9 @@ Only needed if you want to change the code — most people should use the releas
 ```
 
 `build.sh` sets `JAVA_HOME` to Android Studio's bundled JDK (if not already set) and runs
-`./gradlew assembleRelease`. The release build is minified (R8) and debug-signed, not
-Play-ready. Requires a JDK 17+ and the Android SDK with Platform 37 and Build-Tools 36.
+`./gradlew assembleRelease`. The release build is minified (R8) and, unless a signing key is
+configured (below), debug-signed and not Play-ready. Requires a JDK 17+ and the Android SDK
+with Platform 37 and Build-Tools 36.
 If Gradle can't find a JDK on your machine, set `org.gradle.java.home` in your own
 `~/.gradle/gradle.properties` (not the project's, which is committed).
 
@@ -79,6 +90,45 @@ Also installs and AOT-compiles the app and launches it on the TV at `TV`. Use th
 debug APK is large enough that ART's dex verification alone can cause an ANR on
 slower TV hardware. Gradle needs a big heap for R8 (`org.gradle.jvmargs=-Xmx8g` is
 set); with 3 GB it thrashes for 10+ minutes.
+
+## Releases are built by CI
+
+Every push to `main` and every pull request runs `assembleRelease` on GitHub Actions and keeps
+the APK as a workflow artifact, so a broken build shows up without anyone building it by hand.
+That build is debug-signed; it is a check, not something to install.
+
+Pushing a tag builds the APK, signs it with the project's release key and attaches it to that
+tag's release — to the release if you have already written one, otherwise to a draft it creates
+for you to write notes on:
+
+```bash
+git tag -a v0.6.0 -m "..." && git push --follow-tags
+```
+
+This needs four repository secrets. Generate a keystore once and keep it somewhere safe — lose
+it and every installed copy has to be uninstalled before it can be upgraded again:
+
+```bash
+keytool -genkeypair -v -keystore matv-release.jks -alias matv \
+  -keyalg RSA -keysize 2048 -validity 10000
+base64 -i matv-release.jks | pbcopy
+```
+
+Then `gh secret set KEYSTORE_BASE64` (paste the base64), plus `KEYSTORE_PASSWORD`, `KEY_ALIAS`
+and `KEY_PASSWORD`. Keep the `.jks` out of the repo; `.gitignore` already covers it.
+
+To sign local builds with the same key — worth doing, so a build from your machine installs
+over a CI one instead of colliding with it — put a `signing.properties` in the repo root
+(gitignored):
+
+```properties
+storeFile=/absolute/path/to/matv-release.jks
+storePassword=...
+keyAlias=matv
+keyPassword=...
+```
+
+With neither the secrets nor that file, nothing changes: release builds stay debug-signed.
 
 ## First run
 

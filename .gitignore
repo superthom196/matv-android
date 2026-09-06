@@ -15,3 +15,8 @@ dist/
 FABLE_PROMPT.md
 .repowise/
 graphify-out/
+signing.properties
+AGENTS.md
+.codex/
+.mcp.json
+.vscode/

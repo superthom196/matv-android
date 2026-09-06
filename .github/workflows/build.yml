@@ -1,0 +1,51 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # versionName and versionCode come from `git describe --tags` and the commit count,
+          # so the default shallow clone would build 0.0.0 (1).
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Size the build for a 7 GB runner
+        # The project asks for -Xmx8g, which suits a dev machine and not a hosted runner. A
+        # user-level gradle.properties overrides the project's, and compiling Kotlin in-process
+        # keeps a second large JVM off the box.
+        run: |
+          mkdir -p ~/.gradle
+          cat >> ~/.gradle/gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx5g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC -Dfile.encoding=UTF-8
+          kotlin.compiler.execution.strategy=in-process
+          EOF
+
+      - name: Assemble the release build
+        run: ./gradlew assembleRelease
+
+      - name: Report what was built
+        run: |
+          aapt2=$(ls -d "$ANDROID_HOME"/build-tools/*/aapt2 | tail -1)
+          "$aapt2" dump badging app/build/outputs/apk/release/app-release.apk | head -1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
