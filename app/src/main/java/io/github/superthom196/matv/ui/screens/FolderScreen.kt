@@ -99,7 +99,7 @@ fun FolderBrowser(vm: AppViewModel, ui: UiState, nav: Nav) {
                 HSpace(10.dp)
             }
             if (busy) { Text("Loading…", style = MaterialTheme.typography.labelMedium, color = HiFiColors.Muted); HSpace(12.dp) }
-            PillButton("Refresh", onClick = { vm.reloadFolders() }, icon = Icons.Default.Refresh)
+            PillButton("Rescan", onClick = { vm.reloadFolders() }, icon = Icons.Default.Refresh)
         }
         VSpace(8.dp)
         when {

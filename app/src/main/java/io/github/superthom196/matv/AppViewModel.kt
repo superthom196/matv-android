@@ -697,7 +697,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun ensureFoldersLoaded() { if (_folders.value.isEmpty()) openFolder(null) }
 
-    fun reloadFolders() { _folders.value = emptyList(); openFolder(null) }
+    /**
+     * Refresh means "go and look again": the server only walks the filesystem on its own schedule —
+     * twice a day for the local disk — so a folder added five minutes ago is invisible until it
+     * does. The folder list redraws at once; the sync runs behind it and the library reloads only
+     * if the album count actually moves.
+     */
+    fun reloadFolders() {
+        _folders.value = emptyList()
+        openFolder(null)
+        cmd {
+            val before = client.albumsCount()
+            flash("Rescanning library…")
+            client.startSync()
+            var after = before
+            for (i in 1..12) {
+                kotlinx.coroutines.delay(2500)
+                after = client.albumsCount() ?: after
+                if (before != null && after != null && after != before) break
+            }
+            val added = if (before != null && after != null) after - before else 0
+            if (added == 0) { flash("Library is up to date"); return@cmd }
+            albums.reload()
+            artists.reload()
+            playlists.reload()
+            radios.reload()
+            _folders.value = emptyList()
+            openFolder(null)
+            flash("Found $added new album${if (added == 1) "" else "s"}")
+        }
+    }
 
     /** Push a level and load it. `null` loads the root (one entry per provider). */
     fun openFolder(folder: MediaItem?) {

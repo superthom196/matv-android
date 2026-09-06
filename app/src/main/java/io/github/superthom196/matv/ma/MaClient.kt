@@ -347,6 +347,9 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
         return decodeList(el, MediaItem.serializer(), "media item")
     }
 
+    /** Ask the server to re-scan its providers. Returns once the sync is queued, not once it finishes. */
+    suspend fun startSync() { send("music/sync") }
+
     /** Total album count, used only for a loading progress readout; null if the command fails or is absent. */
     /** Count for a library kind ("playlists", "radios", ...) used only for a loading readout. */
     suspend fun libraryCount(kind: String): Int? = runCatching {
