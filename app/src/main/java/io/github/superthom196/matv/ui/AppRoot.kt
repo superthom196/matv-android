@@ -77,12 +77,18 @@ fun AppRoot(vm: AppViewModel) {
         // Volume dial: pops up over everything on any volume or mute change, then clears itself.
         val hud by vm.volumeHud.collectAsStateWithLifecycle()
         hud?.let { VolumeDial(it, Modifier.align(Alignment.Center)) }
-        // Connection badge: visible whenever the socket is not simply "connected" — except for the
-        // very first connect, which runs behind the cached library on every launch and is not an
-        // error. Flashing a red "Connecting…" for those few seconds made every start look broken;
-        // if that first connect never lands, the overlay below takes over after its grace period.
+        // Connection badge: visible whenever the socket is not simply "connected" — except while the
+        // very first connect is still being tried. That runs behind the cached library on every
+        // launch and is not an error, and a server that is down at launch now passes through a
+        // non-fatal Failed and then Reconnecting as the client retries by itself. Flashing red text
+        // for those seconds made every start look broken; if that first connect never lands, the
+        // overlay below takes over after its grace period. A fatal Failed is the server's verdict
+        // and stays visible (it also moves the phase off Main).
         val conn = ui.connection
-        val firstConnect = !ui.everConnected && conn is ConnectionState.Connecting
+        val firstConnect = !ui.everConnected && (
+            conn is ConnectionState.Connecting || conn is ConnectionState.Reconnecting ||
+                (conn is ConnectionState.Failed && !conn.fatal)
+            )
         if (ui.phase == Phase.Main && conn !is ConnectionState.Connected && !firstConnect) {
             val text = when (conn) {
                 is ConnectionState.Reconnecting -> "Reconnecting to ${ui.server?.name ?: "server"}… (${conn.attempt})"
@@ -98,10 +104,30 @@ fun AppRoot(vm: AppViewModel) {
         }
         // After a few seconds of not being connected, take over the screen with a proper explanation.
         if (ui.phase == Phase.Main && conn !is ConnectionState.Connected) {
-            var stale by remember { mutableStateOf(conn is ConnectionState.Failed) }
+            // Only a change of *kind* restarts the timer: every Reconnecting(attempt) is a new value,
+            // and keying on the whole state hid the overlay for another five seconds after each
+            // attempt once it had shown. The kinds: a Failed that is the server's verdict, or any
+            // Failed after a connection was once up (a "Retry now" that did not land), shows the
+            // overlay at once; a Connecting after that is the user's retry, so hide it while that
+            // runs; everything else — the launch-time connect, its brief non-fatal Failed, and the
+            // client's own Reconnecting attempts — waits out the timer, and once the overlay is up
+            // those attempts do not take it down again.
+            val failedNow = conn is ConnectionState.Failed && (conn.fatal || ui.everConnected)
+            val kind = when {
+                failedNow -> 2
+                conn is ConnectionState.Connecting && ui.everConnected -> 1
+                else -> 0
+            }
+            var stale by remember { mutableStateOf(failedNow) }
             // The first connect happens behind the cached library, so give it longer before taking
             // over the screen; after a connection has been lost, five seconds is right.
-            LaunchedEffect(conn) { if (conn !is ConnectionState.Failed) { stale = false; delay(if (ui.everConnected) 5000 else 20000) }; stale = true }
+            LaunchedEffect(kind) {
+                when (kind) {
+                    2 -> stale = true
+                    1 -> { stale = false; delay(5000); stale = true }
+                    else -> if (!stale) { delay(if (ui.everConnected) 5000 else 20000); stale = true }
+                }
+            }
             if (stale) ConnectionOverlay(vm, ui)
         }
         // Transient message (command feedback, errors).

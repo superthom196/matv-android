@@ -267,22 +267,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 server = it.server ?: cfg.serverId?.let { id -> ServerInfo(serverId = id, name = cfg.serverName) },
             )
         }
+        // Whenever the connection lands — now, or from the client's own retries minutes later —
+        // the Connected state loads players and queues (see onConnectionState); nothing here does.
         try {
             client.connect(cfg.baseUrl!!, cfg.token!!, cfg.serverId)
-            afterConnected(cfg)
         } catch (e: MaAuthException) {
             if (!sendToLoginForSavedServer(cfg, e)) {
                 // The server answered the socket but not /info a moment later: the link is flapping.
                 // Treat it as unreachable and keep the cached library up rather than bouncing out
-                // to the Connect screen — the saved address is almost certainly still right.
+                // to the Connect screen — the saved address is almost certainly still right. The
+                // client stops after a rejection, so it has to be told to keep trying.
                 _ui.update { it.copy(connectError = "Cannot reach ${cfg.serverName ?: cfg.baseUrl}: ${e.message}") }
-                retrySavedUntilUp(cfg)
+                client.reconnectInBackground(e.message ?: "unreachable")
             }
         } catch (e: Exception) {
             // Server unreachable right now: stay on Main with the cached library already showing
-            // (from the update above) instead of bouncing to the Connect screen; keep trying quietly.
+            // (from the update above) instead of bouncing to the Connect screen. The client is
+            // already retrying with backoff; only the message is ours to show.
             _ui.update { it.copy(connectError = "Cannot reach ${cfg.serverName ?: cfg.baseUrl}: ${e.message}") }
-            retrySavedUntilUp(cfg)
         }
     }
 
@@ -296,26 +298,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         Log.w(TAG, "saved login rejected: ${e.message}")
         _ui.update { it.copy(phase = Phase.Login, pendingServer = DiscoveredServer(cfg.baseUrl!!, info, "saved"), loginError = "Your saved login is no longer valid. Sign in again.") }
         return true
-    }
-
-    private fun retrySavedUntilUp(cfg: SavedConfig) {
-        viewModelScope.launch {
-            var d = 3000L
-            while (isActive && !client.isConnected && _ui.value.pendingServer == null) {
-                delay(d); d = (d * 2).coerceAtMost(20_000)
-                try {
-                    client.connect(cfg.baseUrl!!, cfg.token!!, cfg.serverId)
-                    afterConnected(cfg)
-                    return@launch
-                } catch (e: MaAuthException) {
-                    // The server is back but no longer accepts the token: ask for a login rather
-                    // than retrying the same rejected token forever.
-                    if (sendToLoginForSavedServer(cfg, e)) return@launch
-                } catch (e: Exception) {
-                    Log.i(TAG, "still unreachable: ${e.message}")
-                }
-            }
-        }
     }
 
     fun startDiscovery() {
@@ -472,10 +454,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun onConnectionState(st: ConnectionState) {
         _ui.update { it.copy(connection = st, server = client.serverInfo ?: it.server) }
-        // Main is now the phase from the moment a saved server is known, so this must not double up
-        // with afterConnected's own refresh on the first connect: only a *re*connect refreshes here.
-        if (st is ConnectionState.Connected && _ui.value.everConnected) {
-            viewModelScope.launch { refreshAll() }
+        if (st is ConnectionState.Connected) {
+            if (_ui.value.everConnected) {
+                // A *re*connect: the grids are already set up, just bring players and queues up to date.
+                viewModelScope.launch { refreshAll() }
+            } else if (!_ui.value.loginBusy) {
+                // The first connection of this run, whether the launch-time connect landed at once or
+                // the client's own retries got there later with the cached library on screen.
+                // login() has loginBusy set throughout and calls afterConnected itself (after swapping
+                // in the long-lived token), so its two connects are left alone here.
+                viewModelScope.launch { afterConnected(prefs.current()) }
+            }
         }
         if (st is ConnectionState.Failed && st.fatal && _ui.value.phase == Phase.Main) {
             // The server itself turned us away (login revoked, server too old). If we still know
@@ -878,7 +867,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val cfg = prefs.current()
             if (!cfg.hasServer) return@launch
             _ui.update { it.copy(connection = ConnectionState.Connecting) }
-            try { client.connect(cfg.baseUrl!!, cfg.token!!, cfg.serverId); afterConnected(cfg) } catch (e: Exception) { flash(e.message ?: "Still unreachable") }
+            // Success arrives as a Connected state (onConnectionState loads or refreshes); a failure
+            // leaves the client retrying by itself, so only the message needs showing here.
+            try { client.connect(cfg.baseUrl!!, cfg.token!!, cfg.serverId) } catch (e: Exception) { flash(e.message ?: "Still unreachable") }
         }
     }
 

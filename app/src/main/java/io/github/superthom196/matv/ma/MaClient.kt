@@ -1,11 +1,13 @@
 package io.github.superthom196.matv.ma
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -92,13 +94,15 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
      * Returns once the socket is up and authenticated. While a connect or reconnect is in flight
      * this waits for it (bounded), so a library refresh or a command issued in the first seconds
      * after launch, or during a reconnect, goes through instead of failing with "not connected".
-     * Throws at once when nothing is trying to connect.
+     * Throws at once when nothing is trying to connect: a non-fatal Failed with a supervisor still
+     * running behind it is a pause between attempts, not the end of the road.
      */
     suspend fun awaitConnected(timeoutMs: Long = 10_000) {
-        when (_state.value) {
+        when (val st = _state.value) {
             is ConnectionState.Connected -> return
-            is ConnectionState.Disconnected, is ConnectionState.Failed -> throw MaException("not connected")
-            else -> Unit
+            is ConnectionState.Connecting, is ConnectionState.Reconnecting -> Unit
+            is ConnectionState.Failed -> if (st.fatal || connectJob?.isActive != true) throw MaException("not connected")
+            is ConnectionState.Disconnected -> throw MaException("not connected")
         }
         withTimeoutOrNull(timeoutMs) { _state.first { it is ConnectionState.Connected } }
             ?: throw MaException("not connected")
@@ -148,16 +152,46 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
 
     /**
      * Connect and authenticate with a token. Suspends until the socket is open and `auth`
-     * has been answered, throwing on failure. Afterwards the client keeps itself connected.
+     * has been answered, throwing on failure so the caller can show it. Afterwards the client
+     * keeps itself connected — and it does so after a transport failure too: the server being
+     * down right now is exactly the case the backoff loop exists for, so the state goes to a
+     * non-fatal Failed and a supervisor starts retrying. Only the server's own verdict (a bad
+     * token, a different server, one too old: [MaAuthException]) ends in a fatal Failed with
+     * nothing retrying, since the same token would only be rejected again.
      */
     suspend fun connect(base: String, token: String, expectedServerId: String?) {
         this.baseUrl = base.trimEnd('/')
         this.token = token
         this.expectedServerId = expectedServerId
         connectJob?.cancel()
+        connectJob = null
         _state.value = ConnectionState.Connecting
-        openAndAuth() // throws on first failure so the UI can show it
+        try {
+            openAndAuth()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: MaAuthException) {
+            val cur = _state.value
+            if (!(cur is ConnectionState.Failed && cur.fatal)) _state.value = ConnectionState.Failed(e.message ?: "auth failed", fatal = true)
+            throw e
+        } catch (e: Exception) {
+            val reason = e.message ?: "unreachable"
+            _state.value = ConnectionState.Failed(reason, fatal = false)
+            connectJob = scope.launch { supervise(reason) }
+            throw e
+        }
         connectJob = scope.launch { supervise() }
+    }
+
+    /**
+     * Start retrying in the background if nothing already is: for a caller that has decided a
+     * handshake failure was the network rather than the server's verdict. No-op without a
+     * saved address and token.
+     */
+    fun reconnectInBackground(reason: String) {
+        if (connectJob?.isActive == true) return
+        if (baseUrl == null || token == null) return
+        connectJob = scope.launch { supervise(reason) }
     }
 
     fun disconnect() {
@@ -171,10 +205,16 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
 
     private val closed = MutableSharedFlow<String>(extraBufferCapacity = 8)
 
-    /** Waits for the socket to drop, then reconnects with backoff until it succeeds. */
-    private suspend fun supervise() {
+    /**
+     * Waits for the socket to drop, then reconnects with backoff until it succeeds. With
+     * [initialReason] it skips the wait and starts retrying at once (the connect that never
+     * landed), then settles into the normal wait-for-drop loop.
+     */
+    private suspend fun supervise(initialReason: String? = null) {
+        var pendingReason = initialReason
         while (true) {
-            val reason = closed.first()
+            val reason = pendingReason ?: closed.first()
+            pendingReason = null
             var attempt = 0
             var delayMs = 1000L
             while (true) {
@@ -184,8 +224,13 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
                     delay(delayMs)
                     openAndAuth()
                     break
+                } catch (e: CancellationException) {
+                    // A cancelled supervisor must stop, not spin: delay() throws this on every
+                    // pass once the job is cancelled, and the catch-all below used to swallow it.
+                    throw e
                 } catch (e: MaAuthException) {
-                    _state.value = ConnectionState.Failed(e.message ?: "auth failed", fatal = true)
+                    val cur = _state.value
+                    if (!(cur is ConnectionState.Failed && cur.fatal)) _state.value = ConnectionState.Failed(e.message ?: "auth failed", fatal = true)
                     return
                 } catch (e: Exception) {
                     Log.w(TAG, "reconnect attempt $attempt failed: ${e.message}")
@@ -198,7 +243,13 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
     private suspend fun openAndAuth() {
         val base = baseUrl ?: throw MaException("no server configured")
         val tok = token ?: throw MaAuthException("no token")
-        socket?.cancel()
+        // Detach the old socket before cancelling it. Its onFailure/onClosed fire on OkHttp's thread
+        // and are told apart from the live socket's by `webSocket !== socket`; with the field still
+        // pointing at it, a cancel here raced them into failing the deferred installed below for the
+        // *new* handshake (seen on login, which connects twice in a row).
+        val old = socket
+        socket = null
+        old?.cancel()
         failAllPending("reconnecting")
         val wsUrl = base.replaceFirst("http://", "ws://").replaceFirst("https://", "wss://") + "/ws"
         val info = CompletableDeferred<ServerInfo>()
@@ -207,9 +258,15 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
         socket = ws
         val server = try {
             withTimeout(8_000) { info.await() }
+        } catch (e: TimeoutCancellationException) {
+            ws.cancel()
+            throw MaException("No Music Assistant answer at $base (timeout)")
+        } catch (e: CancellationException) {
+            ws.cancel()
+            throw e
         } catch (e: Exception) {
             ws.cancel()
-            throw MaException("No Music Assistant answer at $base (${e.message ?: "timeout"})")
+            throw MaException("No Music Assistant answer at $base (${e.message ?: "failed"})")
         }
         serverInfo = server
         if (server.schemaVersion < MIN_SCHEMA_VERSION) {
