@@ -394,11 +394,10 @@ fun NowPlayingChip(vm: AppViewModel, onClick: () -> Unit) {
             HSpace(8.dp)
             Icon(Icons.Default.PlayArrow, null, tint = if (np.isPlaying) HiFiColors.Good else HiFiColors.Muted, modifier = Modifier.size(22.dp))
             HSpace(6.dp)
-            Text(
-                if (np.hasMedia) np.title else "Now playing",
-                style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 150.dp),
-            )
+            // A fixed label, not the track title: the header has no room to spare with every tab
+            // showing, and a long title grew this chip until the settings gear fell off the end.
+            // The cover and the green arrow already say what is playing; the title is one press away.
+            Text("Now playing", style = MaterialTheme.typography.labelLarge, maxLines = 1)
         }
     }
 }
