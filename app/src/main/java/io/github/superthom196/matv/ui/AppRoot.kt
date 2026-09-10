@@ -77,9 +77,13 @@ fun AppRoot(vm: AppViewModel) {
         // Volume dial: pops up over everything on any volume or mute change, then clears itself.
         val hud by vm.volumeHud.collectAsStateWithLifecycle()
         hud?.let { VolumeDial(it, Modifier.align(Alignment.Center)) }
-        // Connection badge: visible whenever the socket is not simply "connected".
+        // Connection badge: visible whenever the socket is not simply "connected" — except for the
+        // very first connect, which runs behind the cached library on every launch and is not an
+        // error. Flashing a red "Connecting…" for those few seconds made every start look broken;
+        // if that first connect never lands, the overlay below takes over after its grace period.
         val conn = ui.connection
-        if (ui.phase == Phase.Main && conn !is ConnectionState.Connected) {
+        val firstConnect = !ui.everConnected && conn is ConnectionState.Connecting
+        if (ui.phase == Phase.Main && conn !is ConnectionState.Connected && !firstConnect) {
             val text = when (conn) {
                 is ConnectionState.Reconnecting -> "Reconnecting to ${ui.server?.name ?: "server"}… (${conn.attempt})"
                 is ConnectionState.Connecting -> "Connecting…"

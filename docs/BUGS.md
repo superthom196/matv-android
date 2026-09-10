@@ -3,6 +3,70 @@
 Running list from hands-on sessions on the Bravia. Newest first. Nothing here is fixed
 unless the entry says so.
 
+## 5. Red text on every launch ("b62 was cancelled")
+
+**Reported:** 2026-09-10 · **Severity:** low · **Status:** fixed, installed on the TV and
+verified with six rapid screenshots across two launches (loading text, then the grid; nothing red)
+
+For a few seconds after launch, red text appears while the library is loading. On the
+release build it reads "b62 was cancelled" — a minified coroutine class name.
+
+**Cause:** two things, the second the real one.
+
+1. The connection badge in [AppRoot.kt](../app/src/main/java/io/github/superthom196/matv/ui/AppRoot.kt)
+   was shown, in warning red, for the normal first "Connecting…" behind the cached grid.
+   It is now hidden for the first connect of a run; reconnects after a lost link still show it.
+2. [AlbumIndex.kt](../app/src/main/java/io/github/superthom196/matv/AlbumIndex.kt) started
+   reading its cache the moment the main screen appeared; the socket connected about 350 ms
+   later, while that read was still going, and `afterConnected` saw an index that was not
+   yet `ready` and `reset()` it, cancelling the read. The cancelled coroutine's
+   `catch (e: Exception)` caught the `CancellationException` and, having nothing on screen
+   yet, wrote its message — "<Job> was cancelled" — as the grid's error, in red, until the
+   restarted load finished from cache a second or so later. Same job cancellation also
+   scheduled a pointless 30 s retry.
+
+**Fix:** the index rethrows cancellations instead of reporting them (the favourites, queue
+and search loaders now do the same), and on connect an index still reading its cache is
+left alone: its server fetch waits for the connection (`MaClient.send`) and completes on
+its own, so the cache is read once rather than twice. The log now shows one "from cache"
+line per index at launch instead of a cancelled read and a restart.
+
+## 4. Sometimes fails to find the server
+
+**Reported:** 2026-09-10 · **Severity:** high · **Status:** fixed and installed on the TV;
+the normal launch path verified, the standby/wake path not yet (the TV was in standby when
+the fix was made, so no log of a failure was captured)
+
+The server is always on and on the same switch as the TV, yet the app sometimes lands on
+the Connect screen and the network scan finds nothing.
+
+**Cause (from the code; the log was not captured):** in
+[MaClient.kt](../app/src/main/java/io/github/superthom196/matv/ma/MaClient.kt) the `auth`
+handshake wrapped *every* failure as a login rejection, including a reply timeout, a send
+failure and the socket dropping mid-handshake. A rejection is treated as fatal: at startup it
+went to the Connect screen if `/info` did not answer within 2.5 s, and from the reconnect
+loop it raised a fatal `Failed` state, which also goes to the Connect screen and starts a scan.
+A TV coming out of standby, with the link still coming up, is exactly when the handshake
+stalls — and exactly when the scan then finds nothing (no local IPv4 address yet, so no
+subnet to sweep; mDNS unreliable on Android TV).
+
+**Fix:**
+- Only an answer from the server (a reply carrying an error code) counts as a rejection.
+  Transport failures during the handshake are ordinary connection errors and go through the
+  quiet retry loop with the cached library still on screen.
+- When a rejection *does* happen and the server is still known, the app goes to the login
+  screen for that server instead of discovery.
+- `MaClient.send` now waits (up to 10 s) for a connect or reconnect in flight instead of
+  failing with "not connected", so library refreshes and commands issued in the first seconds
+  after launch go through rather than erroring and waiting for a 30 s retry.
+- Discovery probes the last known server address directly, every 2 s for the whole scan,
+  and the subnet sweep waits for the TV to have an IPv4 address before sweeping. Sweep
+  timeouts are longer (1 s per host) and the scan window is 15 s.
+
+**Still to check by hand:** put the TV into standby for a few minutes with the app open,
+wake it, and confirm it reconnects without visiting the Connect screen. If it still lands
+there, `adb logcat -s MaClient AppViewModel MaDiscovery` around the wake will say why.
+
 ## 3. Up from the left column of the album grid lands on the Artists tab
 
 **Reported:** 2026-09-08 · **Severity:** medium · **Status:** fixed in the working tree

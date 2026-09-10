@@ -8,6 +8,8 @@ import android.net.nsd.NsdServiceInfo
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
@@ -30,10 +32,35 @@ data class DiscoveredServer(val baseUrl: String, val info: ServerInfo, val via: 
  */
 class MaDiscovery(private val context: Context, private val client: MaClient) {
 
-    fun discover(): Flow<DiscoveredServer> = callbackFlow {
+    companion object {
+        /** How long one scan runs before the caller stops it. */
+        const val WINDOW_MS = 15_000L
+    }
+
+    /**
+     * @param knownHosts base URLs worth trying before and alongside the sweep — the server we were
+     *   last connected to. They are re-probed every couple of seconds for the whole window, because
+     *   the usual reason for a scan on a TV is that it has just woken and the network is still coming up.
+     */
+    fun discover(knownHosts: List<String> = emptyList()): Flow<DiscoveredServer> = callbackFlow {
         val seen = HashSet<String>()
         fun offer(s: DiscoveredServer) {
             if (seen.add(s.info.serverId)) trySend(s)
+        }
+
+        // --- the server we already know ---
+        val known = launch(Dispatchers.IO) {
+            val hosts = knownHosts.map { it.trimEnd('/') }.filter { it.isNotBlank() }.distinct()
+            if (hosts.isEmpty()) return@launch
+            while (isActive) {
+                for (base in hosts) {
+                    if (seen.isNotEmpty()) return@launch
+                    runCatching { client.fetchInfo(base, timeoutMs = 2500) }
+                        .onSuccess { offer(DiscoveredServer(base, it, "saved")) }
+                        .onFailure { Log.i(TAG, "known host $base not answering: ${it.message}") }
+                }
+                delay(2000)
+            }
         }
 
         // --- mDNS ---
@@ -65,7 +92,14 @@ class MaDiscovery(private val context: Context, private val client: MaClient) {
 
         // --- subnet sweep ---
         val sweep = launch(Dispatchers.IO) {
-            val prefixes = localIpv4Prefixes()
+            // No IPv4 address yet means the link is still coming up: wait for it rather than sweeping nothing.
+            var prefixes = localIpv4Prefixes()
+            var waited = 0L
+            while (prefixes.isEmpty() && waited < WINDOW_MS - 4000 && isActive) {
+                Log.i(TAG, "no local IPv4 address yet; waiting for the network")
+                delay(1500); waited += 1500
+                prefixes = localIpv4Prefixes()
+            }
             Log.i(TAG, "sweeping ${prefixes.joinToString()}")
             val gate = Semaphore(32)
             for (prefix in prefixes) {
@@ -73,7 +107,8 @@ class MaDiscovery(private val context: Context, private val client: MaClient) {
                     launch {
                         gate.withPermit {
                             val base = "http://$prefix.$i:$MA_DEFAULT_PORT"
-                            val info = withTimeoutOrNull(1500) { runCatching { client.fetchInfo(base, timeoutMs = 600) }.getOrNull() }
+                            // A busy Pi can take a while over /info; a whole pass still fits the window.
+                            val info = withTimeoutOrNull(2500) { runCatching { client.fetchInfo(base, timeoutMs = 1000) }.getOrNull() }
                             if (info != null) offer(DiscoveredServer(base, info, "scan"))
                         }
                     }
@@ -83,6 +118,7 @@ class MaDiscovery(private val context: Context, private val client: MaClient) {
 
         awaitClose {
             runCatching { nsd?.stopServiceDiscovery(listener) }
+            known.cancel()
             sweep.cancel()
         }
     }.flowOn(Dispatchers.IO)

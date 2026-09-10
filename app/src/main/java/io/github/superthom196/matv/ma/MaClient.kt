@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -86,6 +87,22 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
         private set
 
     val isConnected: Boolean get() = _state.value is ConnectionState.Connected
+
+    /**
+     * Returns once the socket is up and authenticated. While a connect or reconnect is in flight
+     * this waits for it (bounded), so a library refresh or a command issued in the first seconds
+     * after launch, or during a reconnect, goes through instead of failing with "not connected".
+     * Throws at once when nothing is trying to connect.
+     */
+    suspend fun awaitConnected(timeoutMs: Long = 10_000) {
+        when (_state.value) {
+            is ConnectionState.Connected -> return
+            is ConnectionState.Disconnected, is ConnectionState.Failed -> throw MaException("not connected")
+            else -> Unit
+        }
+        withTimeoutOrNull(timeoutMs) { _state.first { it is ConnectionState.Connected } }
+            ?: throw MaException("not connected")
+    }
 
     // ---------------------------------------------------------------- HTTP helpers
 
@@ -213,7 +230,12 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
             sendRaw("auth", buildJsonObject { put("token", JsonPrimitive(tok)) })
         } catch (e: MaException) {
             ws.cancel()
-            throw MaAuthException("Server rejected the saved login (${e.message}). Please log in again.")
+            // Only an answer from the server counts as a rejection. A timeout, a send failure or the
+            // socket dropping mid-handshake (`code` is null for all of those) is the network, not the
+            // login — treating it as a bad token used to throw the user out to the Connect screen and
+            // a LAN scan whenever the link hiccupped, typically right as the TV woke up.
+            if (e.code != null) throw MaAuthException("Server rejected the saved login (${e.message}). Please log in again.")
+            throw MaException("No auth answer from $base (${e.message})")
         }
         val ok = (result as? JsonObject)?.get("authenticated")?.jsonPrimitive?.contentOrNull == "true"
             || (result as? JsonPrimitive)?.contentOrNull == "true"
@@ -311,7 +333,7 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
 
     /** Send a command; `args` values may be String, Number, Boolean, List<String> or JsonElement. */
     suspend fun send(command: String, vararg args: Pair<String, Any?>): JsonElement {
-        if (!isConnected) throw MaException("not connected")
+        awaitConnected()
         val obj = buildJsonObject {
             for ((k, v) in args) {
                 if (v == null) continue

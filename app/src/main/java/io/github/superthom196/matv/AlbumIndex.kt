@@ -2,6 +2,7 @@ package io.github.superthom196.matv
 
 import android.util.Log
 import io.github.superthom196.matv.ma.MediaItem
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -107,6 +108,10 @@ class AlbumIndex(
                 if (changed || shown == null) {
                     runCatching { persist?.invoke(all) }.onFailure { Log.w(TAG, "$name: cache write failed: ${it.message}") }
                 }
+            } catch (e: CancellationException) {
+                // Cancelled by a newer load() or reset(): that one owns the state now. Reporting the
+                // cancellation as a failure put "<Job> was cancelled" on screen in red at every launch.
+                throw e
             } catch (e: Exception) {
                 if (shown == null) {
                     _state.update { it.copy(loading = false, error = e.message ?: "Failed to load albums") }

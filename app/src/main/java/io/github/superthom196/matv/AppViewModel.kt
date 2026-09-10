@@ -10,6 +10,7 @@ import io.github.superthom196.matv.ma.ImageUrls
 import io.github.superthom196.matv.ma.MaAuthException
 import io.github.superthom196.matv.ma.MaClient
 import io.github.superthom196.matv.ma.MaDiscovery
+import io.github.superthom196.matv.ma.MIN_SCHEMA_VERSION
 import io.github.superthom196.matv.ma.MediaItem
 import io.github.superthom196.matv.ma.MediaItemImage
 import io.github.superthom196.matv.ma.Player
@@ -270,14 +271,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             client.connect(cfg.baseUrl!!, cfg.token!!, cfg.serverId)
             afterConnected(cfg)
         } catch (e: MaAuthException) {
-            // Token rejected (revoked on the server, expired) or a different server answered: go
-            // straight to the login screen for the saved server instead of making the user rediscover it.
-            val info = runCatching { withContext(Dispatchers.IO) { client.fetchInfo(cfg.baseUrl!!) } }.getOrNull()
-            if (info != null) {
-                _ui.update { it.copy(phase = Phase.Login, pendingServer = DiscoveredServer(cfg.baseUrl!!, info, "saved"), loginError = "Your saved login is no longer valid. Sign in again.") }
-            } else {
-                _ui.update { it.copy(phase = Phase.Connect, connectError = e.message) }
-                startDiscovery()
+            if (!sendToLoginForSavedServer(cfg, e)) {
+                // The server answered the socket but not /info a moment later: the link is flapping.
+                // Treat it as unreachable and keep the cached library up rather than bouncing out
+                // to the Connect screen — the saved address is almost certainly still right.
+                _ui.update { it.copy(connectError = "Cannot reach ${cfg.serverName ?: cfg.baseUrl}: ${e.message}") }
+                retrySavedUntilUp(cfg)
             }
         } catch (e: Exception) {
             // Server unreachable right now: stay on Main with the cached library already showing
@@ -285,6 +284,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _ui.update { it.copy(connectError = "Cannot reach ${cfg.serverName ?: cfg.baseUrl}: ${e.message}") }
             retrySavedUntilUp(cfg)
         }
+    }
+
+    /**
+     * Token rejected (revoked on the server, expired) or a different server answered: go straight
+     * to the login screen for the saved server instead of making the user rediscover it. Returns
+     * false when the server cannot even be asked for its /info, in which case nothing was changed.
+     */
+    private suspend fun sendToLoginForSavedServer(cfg: SavedConfig, e: MaAuthException): Boolean {
+        val info = runCatching { withContext(Dispatchers.IO) { client.fetchInfo(cfg.baseUrl!!) } }.getOrNull() ?: return false
+        Log.w(TAG, "saved login rejected: ${e.message}")
+        _ui.update { it.copy(phase = Phase.Login, pendingServer = DiscoveredServer(cfg.baseUrl!!, info, "saved"), loginError = "Your saved login is no longer valid. Sign in again.") }
+        return true
     }
 
     private fun retrySavedUntilUp(cfg: SavedConfig) {
@@ -296,7 +307,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     client.connect(cfg.baseUrl!!, cfg.token!!, cfg.serverId)
                     afterConnected(cfg)
                     return@launch
-                } catch (_: Exception) { }
+                } catch (e: MaAuthException) {
+                    // The server is back but no longer accepts the token: ask for a login rather
+                    // than retrying the same rejected token forever.
+                    if (sendToLoginForSavedServer(cfg, e)) return@launch
+                } catch (e: Exception) {
+                    Log.i(TAG, "still unreachable: ${e.message}")
+                }
             }
         }
     }
@@ -306,7 +323,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(discovering = true, discovered = emptyList()) }
         discoveryJob = viewModelScope.launch {
             try {
-                discovery.discover().collect { s ->
+                // The last server we talked to is probed directly, ahead of the sweep, and keeps being
+                // probed while the scan runs: on a TV fresh out of standby the link may not be up yet.
+                val known = listOfNotNull(prefs.current().baseUrl, _ui.value.baseUrl).distinct()
+                discovery.discover(known).collect { s ->
                     _ui.update { st -> if (st.discovered.any { it.info.serverId == s.info.serverId }) st else st.copy(discovered = st.discovered + s) }
                 }
             } finally {
@@ -314,7 +334,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         // The sweep finishes in a few seconds; stop after a bounded window.
-        viewModelScope.launch { delay(12_000); discoveryJob?.cancel() }
+        viewModelScope.launch { delay(MaDiscovery.WINDOW_MS); discoveryJob?.cancel() }
     }
 
     fun stopDiscovery() { discoveryJob?.cancel() }
@@ -405,7 +425,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // different server needs everything wiped, since its albums/artists are not ours to show.
         val sameServer = client.serverInfo?.serverId != null && client.serverInfo?.serverId == _ui.value.server?.serverId
         for (index in listOf(albums, artists, playlists, radios)) {
-            if (sameServer && index.state.value.ready) index.reload() else index.reset()
+            val st = index.state.value
+            when {
+                !sameServer -> index.reset()
+                st.ready -> index.reload()
+                // Still reading its cache from the launch: leave it be. Its server fetch waits for
+                // this very connection (MaClient.send), so it completes on its own; resetting it here
+                // threw the cache read away and made the grid start over.
+                st.loading -> Unit
+                else -> index.reset()
+            }
         }
         _favourites.value = Favourites()
         _favOverrides.value = emptyMap()
@@ -449,8 +478,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             viewModelScope.launch { refreshAll() }
         }
         if (st is ConnectionState.Failed && st.fatal && _ui.value.phase == Phase.Main) {
-            _ui.update { it.copy(phase = Phase.Connect, connectError = st.reason) }
-            startDiscovery()
+            // The server itself turned us away (login revoked, server too old). If we still know
+            // who it is, offer a fresh login there; only a stranger sends the user back to discovery.
+            val base = _ui.value.baseUrl
+            val info = client.serverInfo
+            if (base != null && info != null && info.schemaVersion >= MIN_SCHEMA_VERSION) {
+                _ui.update { it.copy(phase = Phase.Login, pendingServer = DiscoveredServer(base, info, "saved"), loginError = st.reason) }
+            } else {
+                _ui.update { it.copy(phase = Phase.Connect, connectError = st.reason) }
+                startDiscovery()
+            }
         }
     }
 
@@ -772,6 +809,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val items = client.queueItems(qid)
                 _queue.value = QueueView(items = items, currentIndex = queues[qid]?.currentIndex, loading = false)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _queue.update { it.copy(loading = false, error = e.message ?: "Failed to load queue") }
             }
@@ -804,6 +843,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val t = client.libraryItems("tracks", 0, 500, favoriteOnly = true)
                 val p = runCatching { client.libraryItems("playlists", 0, 200, favoriteOnly = true) }.getOrDefault(emptyList())
                 _favourites.value = Favourites(a, al, t, p, loading = false, loaded = true)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _favourites.update { it.copy(loading = false, error = e.message ?: "Failed to load favourites") }
             }
@@ -820,6 +861,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val res = client.search(q)
                 _search.update { if (it.query == q) it.copy(results = res, searching = false) else it }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _search.update { it.copy(searching = false, error = e.message ?: "Search failed") }
             }
