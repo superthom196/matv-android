@@ -41,6 +41,7 @@ import io.github.superthom196.matv.ui.screens.QueueScreen
 import io.github.superthom196.matv.ui.screens.SearchScreen
 import io.github.superthom196.matv.ui.screens.GenreAlbumsScreen
 import io.github.superthom196.matv.ui.screens.SettingsScreen
+import io.github.superthom196.matv.ui.screens.VisualizerScreen
 
 /** Screens inside the connected app. A plain in-memory back stack; Back pops, exits at the root. */
 sealed class MainScreen {
@@ -50,6 +51,7 @@ sealed class MainScreen {
     data object Queue : MainScreen()
     data object Search : MainScreen()
     data object Settings : MainScreen()
+    data object Visualizer : MainScreen()
     data class Detail(val item: MediaItem) : MainScreen()
     data class Genre(val name: String) : MainScreen()
 }
@@ -112,7 +114,13 @@ fun AppRoot(vm: AppViewModel) {
 @Composable
 private fun MainFlow(vm: AppViewModel) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    val nav = remember { Nav(if (ui.selectedPlayerId == null) MainScreen.Players else MainScreen.Library) }
+    val startScreen = (androidx.compose.ui.platform.LocalContext.current as? android.app.Activity)?.intent?.getStringExtra("screen")
+    val nav = remember {
+        Nav(if (ui.selectedPlayerId == null) MainScreen.Players else MainScreen.Library).also {
+            // `adb shell am start ... --es screen visualizer` lands on the visualiser: for development.
+            if (startScreen == "visualizer" && ui.selectedPlayerId != null) it.push(MainScreen.Visualizer)
+        }
+    }
     BackHandler(enabled = nav.stack.size > 1) { nav.pop() }
     // Screens are swapped, not stacked, so a screen leaving composition would lose every
     // rememberSaveable it owns — which sent you back to the default tab, and to the top of the
@@ -129,6 +137,7 @@ private fun MainFlow(vm: AppViewModel) {
             MainScreen.Queue -> QueueScreen(vm, ui, nav)
             MainScreen.Search -> SearchScreen(vm, ui, nav)
             MainScreen.Settings -> SettingsScreen(vm, ui, nav)
+            MainScreen.Visualizer -> VisualizerScreen(vm, ui, nav)
             is MainScreen.Detail -> DetailScreen(vm, ui, nav, s.item)
             is MainScreen.Genre -> GenreAlbumsScreen(vm, nav, s.name)
         }

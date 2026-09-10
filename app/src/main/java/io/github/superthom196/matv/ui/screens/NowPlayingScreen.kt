@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.runtime.Composable
@@ -95,6 +96,8 @@ fun NowPlayingScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
                 // Player chip / state
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     PillButton("Queue", onClick = { nav.push(MainScreen.Queue) }, icon = Icons.AutoMirrored.Filled.QueueMusic)
+                    HSpace(10.dp)
+                    PillButton("Visualiser", onClick = { nav.push(MainScreen.Visualizer) }, icon = Icons.Default.AutoAwesome)
                     // Shuffle / repeat live up here: the transport row below is already as wide as the column.
                     HSpace(10.dp)
                     TintedIconButton(
