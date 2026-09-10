@@ -47,10 +47,6 @@ class VisualizerFeed(
         private set
     override val palette = DEFAULT_PALETTE.copyOf()
 
-    private val client = OkHttpClient.Builder()
-        .readTimeout(0, TimeUnit.MILLISECONDS)
-        .pingInterval(20, TimeUnit.SECONDS)
-        .build()
     @Volatile private var socket: WebSocket? = null
     @Volatile private var closed = false
     @Volatile private var authed = false
@@ -95,8 +91,11 @@ class VisualizerFeed(
 
     fun stop() {
         closed = true
-        socket?.close(1000, "bye")
+        // Drop the field first: the old socket's onClosed/onFailure then fails the identity
+        // check in the listener and cannot schedule a reconnect over a later start().
+        val s = socket
         socket = null
+        s?.close(1000, "bye")
     }
 
     private fun connect() {
@@ -109,10 +108,18 @@ class VisualizerFeed(
 
     private val listener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
+            if (webSocket !== socket) return
             webSocket.send(JSONObject().put("type", "auth").put("token", token).toString())
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
+            if (webSocket !== socket) return
+            // A malformed frame is dropped here; thrown out of the reader it would fail the
+            // whole socket and cost a 3 s reconnect.
+            runCatching { handleText(webSocket, text) }.onFailure { Log.w(TAG, "bad text frame dropped", it) }
+        }
+
+        private fun handleText(webSocket: WebSocket, text: String) {
             val msg = JSONObject(text)
             when (msg.optString("type")) {
                 "auth_ok" -> { state = "authenticated"; authed = true; sendTimePing(webSocket) }
@@ -141,6 +148,7 @@ class VisualizerFeed(
         }
 
         override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+            if (webSocket !== socket) return
             if (bytes.size < 9) return
             val buf = ByteBuffer.wrap(bytes.toByteArray())
             val tag = buf.get().toInt() and 0xff
@@ -165,20 +173,23 @@ class VisualizerFeed(
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            if (webSocket !== socket) return
             state = "failed: ${t.message ?: t.javaClass.simpleName}"
             Log.w(TAG, "feed failure", t)
-            retry()
+            retry(webSocket)
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+            if (webSocket !== socket) return
             // The server closed (4001 = auth rejected). Answer the close or OkHttp never finishes it.
             state = "closed $code $reason"
             webSocket.close(1000, null)
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            if (webSocket !== socket) return
             state = "closed $code $reason"
-            retry()
+            retry(webSocket)
         }
     }
 
@@ -192,10 +203,14 @@ class VisualizerFeed(
         for (i in tail.indices.reversed()) { val o = tail[i]; if (kotlin.math.abs(o.serverUs - f.serverUs) > 12_000) frames.addLast(o) }
     }
 
-    private fun retry() {
+    /** Reconnect in 3 s, unless the feed was stopped or restarted meanwhile (then a newer socket owns it). */
+    private fun retry(failed: WebSocket) {
         if (closed) return
         synced = false
-        Thread { Thread.sleep(3000); connect() }.start()
+        Thread {
+            Thread.sleep(3000)
+            if (!closed && socket === failed) connect()
+        }.start()
     }
 
     private fun sendTimePing(ws: WebSocket) {
@@ -219,7 +234,11 @@ class VisualizerFeed(
 
     override fun update(t: Double) {
         val now = nowUs()
-        if (authed) socket?.let { if (!synced || now - lastTimePing > 2_000_000) sendTimePing(it) }
+        // Clock pings: brisk until the first server/time reply lands, then one every 2 s.
+        if (authed) socket?.let {
+            val gap = if (synced) 2_000_000 else 250_000
+            if (now - lastTimePing > gap) sendTimePing(it)
+        }
         if (!synced) { decay(); return }
         val serverNow = now + offsetUs
         var frame: Frame? = null
@@ -323,5 +342,14 @@ class VisualizerFeed(
             state, if (synced) "ok" else "no", buffered, leadMs, consumed, clears, sampleRate)
     }
 
-    companion object { const val TAG = "MATV/visualizer" }
+    companion object {
+        const val TAG = "MATV/visualizer"
+        /** One client for every feed: a per-instance one leaves its dispatcher threads and pool behind on each visit. */
+        private val client: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .readTimeout(0, TimeUnit.MILLISECONDS)
+                .pingInterval(20, TimeUnit.SECONDS)
+                .build()
+        }
+    }
 }

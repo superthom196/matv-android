@@ -64,6 +64,7 @@ class TileFieldRenderer : GLSurfaceView.Renderer {
     private var workPending = false
     private var resultReady = false
     private var workerStarted = false
+    @Volatile private var stopped = false
     private var frameDt = 0.04f
     private var lastFrameT = 0.0
     private val inst = ByteBuffer.allocateDirect(COLS * ROWS * 4 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
@@ -87,14 +88,15 @@ class TileFieldRenderer : GLSurfaceView.Renderer {
     private val smoothPalette = FloatArray(18).also { System.arraycopy(DEFAULT_PALETTE, 0, it, 0, 18) }
 
     private fun startWorker() {
-        if (workerStarted) return
+        if (workerStarted || stopped) return
         workerStarted = true
         Thread({
             val local = FloatArray(RIPPLES * 4)
-            while (true) {
+            while (!stopped) {
                 val t: Float; val amp: Float
                 synchronized(workLock) {
-                    while (!workPending) (workLock as Object).wait()
+                    while (!workPending && !stopped) (workLock as Object).wait()
+                    if (stopped) return@Thread
                     workPending = false
                     t = workT; amp = workAmp
                     System.arraycopy(workRipples, 0, local, 0, local.size)
@@ -108,6 +110,18 @@ class TileFieldRenderer : GLSurfaceView.Renderer {
                 }
             }
         }, "field").apply { isDaemon = true; priority = Thread.NORM_PRIORITY + 1 }.start()
+    }
+
+    /**
+     * Let the field worker go: without this it waits on [workLock] forever and keeps the
+     * renderer and its arrays alive after the screen is gone. GL objects belong to the
+     * context and die with the surface, so nothing else needs freeing here.
+     */
+    fun release() {
+        synchronized(workLock) {
+            stopped = true
+            (workLock as Object).notifyAll()
+        }
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {

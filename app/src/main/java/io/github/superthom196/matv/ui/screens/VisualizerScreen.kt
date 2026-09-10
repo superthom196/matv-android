@@ -24,7 +24,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -33,8 +32,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import io.github.superthom196.matv.AppViewModel
+import io.github.superthom196.matv.AuthHolder
 import io.github.superthom196.matv.UiState
-import io.github.superthom196.matv.ma.Prefs
 import io.github.superthom196.matv.ui.Artwork
 import io.github.superthom196.matv.ui.HSpace
 import io.github.superthom196.matv.ui.HiFiColors
@@ -52,7 +51,6 @@ import kotlinx.coroutines.delay
  */
 @Composable
 fun VisualizerScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
-    val context = LocalContext.current
     val renderer = remember { TileFieldRenderer() }
     var feed by remember { mutableStateOf<VisualizerFeed?>(null) }
     val playerId = ui.selectedPlayerId
@@ -66,11 +64,11 @@ fun VisualizerScreen(vm: AppViewModel, ui: UiState, nav: Nav) {
     LaunchedEffect(playerId, baseUrl) {
         feed?.stop(); feed = null; renderer.source = IdleBands
         if (playerId == null || baseUrl == null) return@LaunchedEffect
-        val token = Prefs(context).current().token ?: return@LaunchedEffect
+        val token = AuthHolder.token ?: return@LaunchedEffect
         val url = baseUrl.trimEnd('/').replaceFirst("http", "ws") + "/milkdrop_visualizer"
         feed = VisualizerFeed(url, token, playerId).also { it.start(); renderer.source = it }
     }
-    DisposableEffect(Unit) { onDispose { feed?.stop(); renderer.source = IdleBands } }
+    DisposableEffect(Unit) { onDispose { feed?.stop(); renderer.source = IdleBands; renderer.release() } }
 
     val glView = remember { mutableStateOf<GLSurfaceView?>(null) }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
