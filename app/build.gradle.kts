@@ -102,4 +102,5 @@ dependencies {
     implementation(libs.serialization.json)
     implementation(libs.coroutines.android)
     implementation(libs.datastore.preferences)
+    testImplementation(libs.junit)
 }

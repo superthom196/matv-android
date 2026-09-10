@@ -148,7 +148,9 @@ private val nonWordRegex = Regex("[^a-z0-9 ]")
 internal fun foldKey(raw: String): String {
     val normalized = Normalizer.normalize(raw.trim().lowercase(), Normalizer.Form.NFD)
         .filterNot { Character.getType(it) == Character.NON_SPACING_MARK.toInt() }
-    return nonWordRegex.replace(normalized, "").let { whitespaceRegex.replace(it, " ") }.trim()
+    // Whitespace first: a tab or newline has to become a space before the punctuation pass, which
+    // keeps only letters, digits and spaces, would otherwise delete it and fuse the words.
+    return whitespaceRegex.replace(normalized, " ").let { nonWordRegex.replace(it, "") }.trim()
 }
 
 private fun dropThe(key: String): String {
