@@ -29,6 +29,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -163,22 +166,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Hi-res and genre facts per album, learned in the background and cached on disk. */
     val albumScan = AlbumScan(viewModelScope, prefs, tracksOf = { client.albumTracks(it) })
 
-    init {
-        // Load the cached verdicts, then top up the scan whenever the album library finishes loading.
-        viewModelScope.launch {
-            albumScan.restore()
-            albums.state.collect { st ->
-                if (st.ready) {
-                    // The cached list lands almost instantly; give the first scroll a clear run before
-                    // three album_tracks decodes start competing for this two-core TV's CPU. Nothing is
-                    // lost by waiting — the scan itself is persisted, so a killed app just resumes later.
-                    delay(5_000)
-                    albumScan.ensureScanned(st.items)
-                }
-            }
-        }
-    }
-
     val settings: StateFlow<AppSettings> = prefs.settings.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
     fun updateSettings(transform: (AppSettings) -> AppSettings) { viewModelScope.launch { prefs.saveSettings(transform(settings.value)) } }
 
@@ -244,6 +231,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { client.state.collect { st -> onConnectionState(st) } }
         viewModelScope.launch(Dispatchers.Default) { client.events.collect { ev -> onEvent(ev.event, ev.objectId, ev.data) } }
         viewModelScope.launch { bootstrap() }
+        // The scan's verdicts are cached per server, so load them once the server is known (the saved
+        // one at launch, or whichever we connect to) and start over whenever it changes; no server
+        // (forgotten) drops them. This lives here rather than beside albumScan because viewModelScope
+        // is Main.immediate: a launch runs its body synchronously up to its first suspension, so it
+        // must not touch a property declared below it — and _ui is declared below that spot.
+        viewModelScope.launch {
+            _ui.map { it.server?.serverId?.takeIf { id -> id.isNotBlank() } }.distinctUntilChanged().collect { id ->
+                if (id != null) albumScan.restore(id) else albumScan.reset()
+            }
+        }
+        // Top up the scan whenever the album library finishes loading, and again once a server's
+        // verdicts have been restored: ensureScanned is a no-op before then, so a list that was
+        // ready first would otherwise be missed until it next changed.
+        viewModelScope.launch {
+            combine(albums.state, albumScan.server) { st, sid -> st.ready && sid != null }.collect { ready ->
+                if (ready) {
+                    // The cached list lands almost instantly; give the first scroll a clear run before
+                    // three album_tracks decodes start competing for this two-core TV's CPU. Nothing is
+                    // lost by waiting — the scan itself is persisted, so a killed app just resumes later.
+                    delay(5_000)
+                    // Re-read after the wait: the list, or the server, may have changed meanwhile.
+                    albums.state.value.takeIf { it.ready }?.let { albumScan.ensureScanned(it.items) }
+                }
+            }
+        }
         viewModelScope.launch {
             var last = ""
             _ui.collect {
@@ -303,7 +315,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun startDiscovery() {
         if (discoveryJob?.isActive == true) return
         _ui.update { it.copy(discovering = true, discovered = emptyList()) }
-        discoveryJob = viewModelScope.launch {
+        val job = viewModelScope.launch {
             try {
                 // The last server we talked to is probed directly, ahead of the sweep, and keeps being
                 // probed while the scan runs: on a TV fresh out of standby the link may not be up yet.
@@ -315,8 +327,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _ui.update { it.copy(discovering = false) }
             }
         }
-        // The sweep finishes in a few seconds; stop after a bounded window.
-        viewModelScope.launch { delay(MaDiscovery.WINDOW_MS); discoveryJob?.cancel() }
+        discoveryJob = job
+        // The sweep finishes in a few seconds; stop after a bounded window. Cancel *this* scan, not
+        // whatever discoveryJob holds by then: a "Scan again" started meanwhile must outlive this timer.
+        viewModelScope.launch { delay(MaDiscovery.WINDOW_MS); job.cancel() }
     }
 
     fun stopDiscovery() { discoveryJob?.cancel() }
@@ -387,6 +401,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             artists.reset()
             playlists.reset()
             radios.reset()
+            genres.reset()
+            recentAlbums.reset()
+            albumScan.reset()
             _favourites.value = Favourites()
             _favOverrides.value = emptyMap()
             _folders.value = emptyList()
@@ -406,7 +423,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // leave a ready grid on screen and just refresh it behind the scenes; only a genuinely
         // different server needs everything wiped, since its albums/artists are not ours to show.
         val sameServer = client.serverInfo?.serverId != null && client.serverInfo?.serverId == _ui.value.server?.serverId
-        for (index in listOf(albums, artists, playlists, radios)) {
+        for (index in listOf(albums, artists, playlists, radios, genres)) {
             val st = index.state.value
             when {
                 !sameServer -> index.reset()
@@ -418,6 +435,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 else -> index.reset()
             }
         }
+        // The Latest row is the other server's too. On the same server it is left alone: the
+        // media_item events reload it (see scheduleLibraryReload).
+        if (!sameServer) recentAlbums.reset()
         _favourites.value = Favourites()
         _favOverrides.value = emptyMap()
         _folders.value = emptyList()

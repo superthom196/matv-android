@@ -69,34 +69,37 @@ class Prefs(private val context: Context) {
         val serverName = stringPreferencesKey("server_name")
         val username = stringPreferencesKey("username")
         val playerId = stringPreferencesKey("player_id")
-        // Hi-res verdicts, cached so the album scan runs once rather than on every launch.
-        val hiResAlbums = stringSetPreferencesKey("hires_albums")
-        val hiResChecked = stringSetPreferencesKey("hires_checked")
-        val albumGenres = stringPreferencesKey("album_genres")
+        // Hi-res verdicts, cached so the album scan runs once rather than on every launch. Kept per
+        // server: album keys are "provider:item_id", and "library:311" is a different album on a
+        // different server, so one server's verdicts must never be read back as another's.
+        fun hiResAlbums(serverId: String) = stringSetPreferencesKey("hires_albums:$serverId")
+        fun hiResChecked(serverId: String) = stringSetPreferencesKey("hires_checked:$serverId")
+        fun albumGenres(serverId: String) = stringPreferencesKey("album_genres:$serverId")
+        /** A marker for the code that wrote the scan, not data, so it stays global. */
         val scanVersion = intPreferencesKey("scan_version")
     }
 
-    suspend fun hiResAlbums(): Set<String> = context.dataStore.data.first()[K.hiResAlbums].orEmpty()
+    suspend fun hiResAlbums(serverId: String): Set<String> = context.dataStore.data.first()[K.hiResAlbums(serverId)].orEmpty()
 
-    suspend fun hiResChecked(): Set<String> = context.dataStore.data.first()[K.hiResChecked].orEmpty()
+    suspend fun hiResChecked(serverId: String): Set<String> = context.dataStore.data.first()[K.hiResChecked(serverId)].orEmpty()
 
     /** Album key -> genres, as JSON: genre names are free text, so no delimiter is safe. */
-    suspend fun albumGenres(): Map<String, List<String>> {
-        val raw = context.dataStore.data.first()[K.albumGenres] ?: return emptyMap()
+    suspend fun albumGenres(serverId: String): Map<String, List<String>> {
+        val raw = context.dataStore.data.first()[K.albumGenres(serverId)] ?: return emptyMap()
         return runCatching { maJson.decodeFromString<Map<String, List<String>>>(raw) }.getOrDefault(emptyMap())
     }
 
-    suspend fun saveAlbumGenres(map: Map<String, List<String>>) {
+    suspend fun saveAlbumGenres(serverId: String, map: Map<String, List<String>>) {
         val raw = maJson.encodeToString(map)
-        context.dataStore.edit { it[K.albumGenres] = raw }
+        context.dataStore.edit { it[K.albumGenres(serverId)] = raw }
     }
 
     suspend fun scanVersion(): Int = context.dataStore.data.first()[K.scanVersion] ?: 0
 
     suspend fun saveScanVersion(v: Int) { context.dataStore.edit { it[K.scanVersion] = v } }
 
-    suspend fun saveHiRes(hiRes: Set<String>, checked: Set<String>) {
-        context.dataStore.edit { it[K.hiResAlbums] = hiRes; it[K.hiResChecked] = checked }
+    suspend fun saveHiRes(serverId: String, hiRes: Set<String>, checked: Set<String>) {
+        context.dataStore.edit { it[K.hiResAlbums(serverId)] = hiRes; it[K.hiResChecked(serverId)] = checked }
     }
 
     val config: Flow<SavedConfig> = context.dataStore.data.map { p ->

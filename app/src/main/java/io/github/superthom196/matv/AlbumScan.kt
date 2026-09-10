@@ -52,21 +52,54 @@ class AlbumScan(
     private val lock = Mutex()
     private var job: Job? = null
 
-    suspend fun restore() {
+    /**
+     * Server whose verdicts are loaded; null until [restore] has finished for one. The cache is kept
+     * per server — "library:311" is a different album elsewhere — so nothing is scanned or written
+     * until it is known which server the albums belong to.
+     */
+    private val _server = MutableStateFlow<String?>(null)
+    val server: StateFlow<String?> = _server.asStateFlow()
+
+    /** Bumped by every [reset], so a [restore] overtaken by another leaves none of its data behind. */
+    private var generation = 0
+
+    /** Drop everything in memory and stop any scan. The on-disk data is per server and stays. */
+    fun reset() {
+        generation++
+        job?.cancel()
+        job = null
+        _server.value = null
+        checked = emptySet()
+        _hiRes.value = emptySet()
+        _genres.value = emptyMap()
+        _scan.value = ScanProgress()
+    }
+
+    /** Load the verdicts cached for server [id], in place of whichever server's were loaded before. */
+    suspend fun restore(id: String) {
+        reset()
+        val gen = generation
         // Everything was already "checked" for hi-res alone; a bump re-walks them to pick up genres.
         if (prefs.scanVersion() < SCAN_VERSION) {
-            prefs.saveHiRes(prefs.hiResAlbums(), emptySet())
+            prefs.saveHiRes(id, prefs.hiResAlbums(id), emptySet())
             prefs.saveScanVersion(SCAN_VERSION)
             Log.d(TAG, "scan version bumped; re-walking albums for genres")
         }
-        checked = prefs.hiResChecked()
-        _hiRes.value = prefs.hiResAlbums()
-        _genres.value = prefs.albumGenres()
-        Log.d(TAG, "restored ${_hiRes.value.size} hi-res, ${_genres.value.size} tagged, ${checked.size} checked")
+        val restoredChecked = prefs.hiResChecked(id)
+        val restoredHiRes = prefs.hiResAlbums(id)
+        val restoredGenres = prefs.albumGenres(id)
+        // A reset (or a restore for another server) came through while the reads were in flight: it wins.
+        if (gen != generation) return
+        checked = restoredChecked
+        _hiRes.value = restoredHiRes
+        _genres.value = restoredGenres
+        _server.value = id
+        Log.d(TAG, "restored ${_hiRes.value.size} hi-res, ${_genres.value.size} tagged, ${checked.size} checked for $id")
     }
 
-    /** Ask about anything in [albums] not asked about before. Safe to call repeatedly. */
+    /** Ask about anything in [albums] not asked about before. Safe to call repeatedly; a no-op until [restore] has run. */
     fun ensureScanned(albums: List<MediaItem>) {
+        val sid = _server.value ?: return
         if (job?.isActive == true) return
         val pending = albums.filter { key(it) !in checked }
         if (pending.isEmpty()) return
@@ -103,24 +136,32 @@ class AlbumScan(
                     }
                 }.forEach { it.join() }
                 // Persist as we go: a scan interrupted by a restart keeps what it learned.
-                lock.withLock { commit(foundHiRes, foundChecked, foundGenres) }
+                lock.withLock { commit(sid, foundHiRes, foundChecked, foundGenres) }
             }
-            _scan.value = ScanProgress(done, pending.size, running = false)
+            if (sid == _server.value) _scan.value = ScanProgress(done, pending.size, running = false)
             Log.d(TAG, "scan finished: ${_hiRes.value.size} hi-res, ${_genres.value.size} tagged, ${checked.size} checked")
         }
     }
 
     private suspend fun commit(
+        sid: String,
         newHiRes: MutableSet<String>,
         newChecked: MutableSet<String>,
         newGenres: MutableMap<String, List<String>>,
     ) {
         if (newChecked.isEmpty()) return
+        // The scan outlived a server switch ([reset] cancels it, but this may already have been
+        // reached): its findings are the old server's and must not be merged into the new one's.
+        if (sid != _server.value) return
         checked = checked + newChecked
         _hiRes.value = _hiRes.value + newHiRes
         _genres.value = _genres.value + newGenres
-        prefs.saveHiRes(_hiRes.value, checked)
-        prefs.saveAlbumGenres(_genres.value)
+        // Snapshot before suspending, so a reset landing mid-write cannot put an emptied map on disk.
+        val hiRes = _hiRes.value
+        val checkedNow = checked
+        val genres = _genres.value
+        prefs.saveHiRes(sid, hiRes, checkedNow)
+        prefs.saveAlbumGenres(sid, genres)
         newHiRes.clear()
         newChecked.clear()
         newGenres.clear()

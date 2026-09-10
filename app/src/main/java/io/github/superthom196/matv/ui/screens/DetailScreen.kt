@@ -64,7 +64,18 @@ fun DetailScreen(vm: AppViewModel, ui: UiState, nav: Nav, item: MediaItem) {
     var children by remember(item) { mutableStateOf<List<MediaItem>?>(null) }
     var error by remember(item) { mutableStateOf<String?>(null) }
     LaunchedEffect(item, ui.connection) {
-        if (children == null) runCatching { vm.children(item) }.onSuccess { children = it }.onFailure { error = it.message }
+        if (children == null) {
+            // A retry (on reconnect) must not keep showing the last attempt's failure while it runs
+            // or after it succeeds — the error branch below wins over a loaded list.
+            error = null
+            runCatching { vm.children(item) }
+                .onSuccess { children = it; error = null }
+                .onFailure {
+                    // Cancelled by a newer run of this effect: leave the error to that run.
+                    if (it is kotlinx.coroutines.CancellationException) throw it
+                    error = it.message
+                }
+        }
     }
     val playFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { playFocus.requestFocus() } }

@@ -64,4 +64,12 @@ class RecentAlbums(
             runCatching { persist?.invoke(page) }
         }
     }
+
+    /** Forget everything (another server's albums are not ours to show); the next [ensureLoaded] starts over. */
+    fun reset() {
+        job?.cancel()
+        job = null
+        exhausted = false
+        _items.value = emptyList()
+    }
 }
