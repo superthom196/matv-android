@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -193,7 +194,7 @@ private fun GridTile(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)?,
     modifier: Modifier,
-    content: @Composable () -> Unit,
+    content: @Composable (focused: Boolean) -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.05f else 1f, label = "tileScale")
@@ -212,14 +213,14 @@ private fun GridTile(
             .then(if (focused) Modifier.border(2.dp, HiFiColors.Focus, shape) else Modifier),
         propagateMinConstraints = false,
     ) {
-        content()
+        content(focused)
     }
 }
 
 /** Library grid tile: artwork, name, subtitle. */
 @Composable
 fun MediaCard(item: MediaItem, imageUrl: String?, onClick: () -> Unit, modifier: Modifier = Modifier, round: Boolean = false, onLongClick: (() -> Unit)? = null, hiRes: Boolean = false) {
-    GridTile(onClick = onClick, onLongClick = onLongClick, modifier = modifier) {
+    GridTile(onClick = onClick, onLongClick = onLongClick, modifier = modifier) { focused ->
         // Square artwork fills the column, so its captions line up left. A circle is inset from the
         // column edges, which leaves left-aligned text looking detached from it — centre those.
         val align = if (round) TextAlign.Center else TextAlign.Start
@@ -229,7 +230,13 @@ fun MediaCard(item: MediaItem, imageUrl: String?, onClick: () -> Unit, modifier:
                 if (hiRes) HiResBadge(Modifier.align(Alignment.TopEnd).padding(6.dp))
             }
             Spacer(Modifier.height(6.dp))
-            Text(item.name, style = MaterialTheme.typography.titleSmall.copy(fontSize = 12.sp, lineHeight = 15.sp), maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = align, modifier = Modifier.fillMaxWidth())
+            // A name too long for the column ellipsizes at rest and scrolls once the tile is
+            // focused, so the full title is readable without opening anything. The marquee measures
+            // its text unbounded, which is what makes the ellipsis give way to scrolling; only the
+            // one focused tile animates, and the marquee's own start delay means flicking through
+            // the grid does not set every tile it passes moving.
+            val marquee = if (focused) Modifier.basicMarquee(iterations = Int.MAX_VALUE) else Modifier
+            Text(item.name, style = MaterialTheme.typography.titleSmall.copy(fontSize = 12.sp, lineHeight = 15.sp), maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = align, modifier = Modifier.fillMaxWidth().then(marquee))
             val sub = when (item.mediaType) {
                 "album" -> listOfNotNull(item.artistLine.takeIf { it.isNotBlank() }, item.year?.toString()).joinToString(" · ")
                 "playlist" -> item.owner ?: "Playlist"

@@ -1,0 +1,107 @@
+# Bug log
+
+Running list from hands-on sessions on the Bravia. Newest first. Nothing here is fixed
+unless the entry says so.
+
+## 3. Up from the left column of the album grid lands on the Artists tab
+
+**Reported:** 2026-09-08 · **Severity:** medium · **Status:** fixed in the working tree
+and installed on the TV — **not yet verified by hand**
+
+From a tile in the leftmost column of the Albums grid, pressing Up generally jumps focus
+out to the **Artists** tab instead of moving into the Random or Latest shelf above. Not
+100% repeatable: sometimes it does move up a row, but lands in the **second** column
+rather than staying in the first.
+
+That intermittency is the interesting part — same key, same apparent position, two
+different outcomes — so whatever decides it is reading state that is not always current.
+
+**Cause:** the earlier work in [LibraryScreen.kt](../app/src/main/java/io/github/superthom196/matv/ui/screens/LibraryScreen.kt)
+only intercepted Up when there were *no* shelves — `atTopRow` was `index < columns &&
+topRows.all { it.isEmpty() }`, which is false whenever Latest and Random have loaded. So
+in the normal case Up was still left to the 2D focus search, which is exactly what the
+comment there warned about. The search fails because a shelf scrolled out of the grid is
+not composed and so has nothing focusable in it: with nothing above to find, focus escapes
+the grid to the tab bar, and a tab taking focus switches the page. That also explains the
+intermittency — it depends on whether the shelf above happens to be composed at that
+moment. The "up a row but into the second column" case is the same search succeeding but
+landing on the shelf card nearest in x, which from the left grid column is the *second*
+card, the shelf's cards being narrower than the grid's.
+
+**Fix:** Up is now handled by hand for the whole boundary. Each card reports as it takes
+focus whether it is in a shelf or the grid's top row; Up then scrolls the target shelf
+into view and puts focus in it, skipping shelves that are still loading, and calls
+`onBackToTop()` only when there is no shelf left above. Each shelf keeps a
+`focusRestorer`, so coming back up returns to the album you left rather than the start of
+the row. Up deeper in the grid is still left alone — there is always a row above it.
+
+**Still to check by hand:** whether Up out of the grid's top row now lands in Random every
+time, and whether it returns to the card you came down from.
+
+## 2. Long album names should scroll when the tile is selected
+
+**Reported:** 2026-09-08 · **Severity:** low · **Status:** done — in the working tree,
+uncommitted; the release build now on the TV has it
+
+An album name too long for its column ellipsizes and there is no way to read the rest of
+it without opening the album. It should marquee-scroll while the tile is focused.
+
+`GridTile` now hands its focus state to the tile content, and a focused `MediaCard` puts
+`basicMarquee` on the name. Verified on the Bravia: focusing "Selected Downbeats, V…"
+scrolls it through "Downbeats, Volume 1" and back round, while unfocused tiles keep their
+ellipsis. The marquee's own 1.2 s start delay keeps flicking through the grid quiet.
+
+Applies to every grid and shelf, since they all render through `MediaCard` in
+[Components.kt](../app/src/main/java/io/github/superthom196/matv/ui/Components.kt).
+Open questions: whether the subtitle (artist / year) should scroll too, and whether it
+should loop while focused or run a few passes and stop.
+
+## 1. TV standby stops Music Assistant playback
+
+**Reported:** 2026-09-08 · **Severity:** high · **Status:** fixed and verified on the
+Bravia; in the working tree, uncommitted
+
+Queue an album, put the TV into standby, and the music stops. The whole point of a
+controller app is that the hi-fi keeps playing once the screen is off — the TV is not
+the player.
+
+**Repro:** select a player, play an album, press standby on the remote. Playback stops
+on the hi-fi (not just on screen).
+
+Unknown yet: whether it stops on standby itself or a few seconds later, whether it is a
+stop or a pause, and whether it still happens when the app has been backgrounded
+(home) rather than the TV put to sleep.
+
+**First look — candidate cause:** [PlaybackSession.kt](../app/src/main/java/io/github/superthom196/matv/PlaybackSession.kt)
+registers a system `MediaSession` whose callbacks forward straight to the hi-fi:
+`onPause() { vm.pause() }`, `onStop() { vm.stop() }`. On standby the platform routinely
+pauses/stops the active media session (and broadcasts `AUDIO_BECOMING_NOISY`), so the TV
+going to sleep would be relayed to Music Assistant as a real transport command. The
+session claims remote volume and stays `isActive` whenever a player is selected, which
+makes it the obvious target for that platform command.
+
+Worth ruling out alongside it: HDMI-CEC standby propagating to the amp/hi-fi
+independently of the app — confirm by putting the TV into standby with the app force-stopped
+and something else driving playback.
+
+**Confirmed:** logcat across a standby press, 2026-09-08. The MediaSession's `onPause`
+callback fires 77 ms after the panel goes dark, and the app relayed it to the hi-fi:
+
+```
+20:45:01.851 DisplayManagerService: Display device changed state: "Built-in Screen", OFF
+20:45:01.928 MATV/session: ignoring pause from the system: the TV is asleep, the hi-fi is not
+```
+
+HDMI-CEC is ruled out: it was the app's own callback, and nothing else in the log stops
+the player.
+
+**Fix:** [PlaybackSession.kt](../app/src/main/java/io/github/superthom196/matv/PlaybackSession.kt)
+now drops `pause` and `stop` that arrive while the TV is asleep. A real remote press always
+comes with the screen on, which is what tells the two apart. Wakefulness is read from a
+`SCREEN_ON`/`SCREEN_OFF` receiver as well as `PowerManager.isInteractive`, because the
+command and the screen going off land within milliseconds of each other and the order is
+not ours to choose — in this trace the display was already off, so `isInteractive` alone
+caught it, but the receiver covers the other ordering.
+
+**Verified:** full sleep/wake cycle with an album playing. The command was dropped, no
+`players/cmd/*` went to the server, and the music was still playing on waking.

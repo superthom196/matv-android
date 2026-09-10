@@ -493,7 +493,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 queues[id] = q.copy(elapsedTime = secs, elapsedTimeLastUpdated = System.currentTimeMillis() / 1000.0)
                 if (id == _ui.value.activeQueueId) recomputeNowPlaying()
             }
-            "media_item_added", "media_item_updated", "media_item_deleted" -> {
+            // Only an item appearing or disappearing changes what the grids show. media_item_updated
+            // must NOT be in here: Music Assistant restamps an album's play count every time a track
+            // from it starts, so reacting to it re-downloaded the whole library (955 albums + 378
+            // artists, nine round trips) at every single track boundary — on the very socket the
+            // server needs free to hand the player its next track.
+            "media_item_added", "media_item_deleted" -> {
                 val mediaType = data.stringField("media_type")
                 if (mediaType == "album" || mediaType == "artist") scheduleLibraryReload()
             }

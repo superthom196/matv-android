@@ -32,7 +32,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import io.github.superthom196.matv.ui.SectionLabel
 import androidx.compose.runtime.remember
@@ -46,6 +46,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.focusGroup
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -169,6 +170,9 @@ private data class JumpRequest(val index: Int, val token: Long)
 /** Slack around the lazy containers so a focused card's ring is not clipped as it grows. */
 private val RING_ROOM = 8.dp
 
+/** Focus is in the A-Z grid rather than in one of the shelves above it. */
+private const val IN_GRID = -1
+
 /** Height of a shelf, so an empty one still reserves its place. */
 private val ROW_HEIGHT = 206.dp
 
@@ -181,6 +185,8 @@ private fun AlbumRow(
     items: List<MediaItem>,
     hiResAlbums: Set<String>,
     onNearEnd: (Int) -> Unit,
+    onItemFocused: (index: Int) -> Unit,
+    focus: FocusRequester,
 ) {
     val rowState = rememberLazyListState()
     val lastVisible by remember { derivedStateOf { rowState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 } }
@@ -201,13 +207,15 @@ private fun AlbumRow(
             // the same amount and shift back by it: the cards line up with the album columns below,
             // and the focused card still has room for its ring instead of being sliced off.
             contentPadding = PaddingValues(horizontal = RING_ROOM),
-            modifier = Modifier.fillMaxWidth().offset(x = -RING_ROOM).focusRestorer(),
+            // focusRestorer remembers which card was last focused here, so coming back up from
+            // the grid returns to the album you left rather than to the start of the shelf.
+            modifier = Modifier.fillMaxWidth().offset(x = -RING_ROOM).focusRequester(focus).focusGroup().focusRestorer(),
         ) {
-            items(items, key = { "$title:${it.provider}:${it.itemId}" }) { item ->
+            itemsIndexed(items, key = { _, it -> "$title:${it.provider}:${it.itemId}" }) { i, item ->
                 MediaCard(
                     item, vm.imageUrl(item, 256),
                     onClick = { openOrPlay(vm, nav, item) },
-                    modifier = Modifier.width(150.dp),
+                    modifier = Modifier.width(150.dp).onFocusChanged { if (it.isFocused) onItemFocused(i) },
                     hiRes = AlbumScan.marks(item, hiResAlbums),
                 )
             }
@@ -268,7 +276,13 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
     // The rail must feel instant on a slow TV: moving between letters only records the target,
     // and the grid follows once the D-pad pauses, instead of composing a new page of covers per step.
     val railFocus = remember { FocusRequester() }
-    var focusedIndex by remember { mutableIntStateOf(0) }
+    // Left and Up are answered from these rather than from a 2D focus search, which does not find
+    // the rail at all and, leaving the top of the grid, wanders onto whichever tab sits above.
+    // Every card — shelf and grid alike — reports where it is as it takes focus.
+    var atRowStart by remember { mutableStateOf(false) }
+    var inGridTopRow by remember { mutableStateOf(false) }
+    var focusedShelf by remember { mutableIntStateOf(IN_GRID) }
+    val shelfFocus = remember(topRows.size) { List(topRows.size) { FocusRequester() } }
     var followLetter by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(followLetter) {
         val label = followLetter ?: return@LaunchedEffect
@@ -279,6 +293,13 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
     // Deep in a long grid the only way back to the header is holding the D-pad through every row.
     // Back jumps there instead — and only while scrolled down, so at the top it still leaves the app.
     val scope = rememberCoroutineScope()
+    // Put focus into a shelf. It has to be scrolled into view first: a shelf that is off-screen is
+    // not composed, and there is nothing there to take focus until it is.
+    val enterShelf: suspend (Int) -> Unit = { row ->
+        gridState.scrollToItem(row)
+        withFrameNanos { }
+        runCatching { shelfFocus[row].requestFocus() }
+    }
     BackHandler(enabled = gridState.firstVisibleItemIndex > 0) {
         scope.launch { gridState.scrollToItem(0) }
         onBackToTop()
@@ -303,18 +324,41 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
             modifier = Modifier
                 .fillMaxSize()
                 .focusRestorer()
-                // Left from the first column hands focus to the A-Z rail (2D focus search does not find it on its own).
                 .onPreviewKeyEvent { ev ->
-                    if (ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionLeft && focusedIndex % columns == 0) {
-                        runCatching { railFocus.requestFocus() }.isSuccess
-                    } else false
+                    if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (ev.key) {
+                        // Left from the left edge hands focus to the A-Z rail (2D focus search does
+                        // not find it on its own). Anywhere else Left is the shelf's or the grid's.
+                        Key.DirectionLeft -> atRowStart && runCatching { railFocus.requestFocus() }.isSuccess
+                        // Up moves between the shelves and the grid by hand. A 2D search cannot be
+                        // trusted with it: the shelf above is often scrolled out of the grid and so
+                        // not composed at all, and with nothing above to find, focus escapes to the
+                        // tab bar — which switches the page. Deeper in the grid there is always a
+                        // row above, so Up is left alone there.
+                        Key.DirectionUp -> when {
+                            focusedShelf == IN_GRID && !inGridTopRow -> false
+                            else -> {
+                                val from = if (focusedShelf == IN_GRID) topRows.size else focusedShelf
+                                // A shelf that is still loading holds its space but has nothing
+                                // focusable in it, so skip past it to the next one that has albums.
+                                val above = (from - 1 downTo 0).firstOrNull { topRows[it].second.isNotEmpty() }
+                                if (above == null) onBackToTop() else scope.launch { enterShelf(above) }
+                                true
+                            }
+                        }
+                        else -> false
+                    }
                 },
         ) {
-            topRows.forEach { (title, items) ->
+            topRows.forEachIndexed { row, (title, items) ->
                 item(span = { GridItemSpan(maxLineSpan) }, key = "row:$title") {
                     AlbumRow(vm, nav, title, items, hiResAlbums, onNearEnd = { last ->
                         if (title == "Latest") vm.recentAlbums.ensureLoaded(last)
-                    })
+                    }, onItemFocused = { i ->
+                        focusedShelf = row
+                        atRowStart = i == 0
+                        inGridTopRow = false
+                    }, focus = shelfFocus[row])
                 }
             }
             if (showTopRows) {
@@ -324,7 +368,12 @@ private fun IndexedGrid(vm: AppViewModel, nav: Nav, index: AlbumIndex, columns: 
             }
             itemsIndexed(state.items, key = { _, it -> "${it.provider}:${it.itemId}" }) { index, item ->
                 val mod = Modifier
-                    .onFocusChanged { if (it.isFocused) focusedIndex = index }
+                    .onFocusChanged {
+                        if (!it.isFocused) return@onFocusChanged
+                        focusedShelf = IN_GRID
+                        atRowStart = index % columns == 0
+                        inGridTopRow = index < columns
+                    }
                     .then(if (index == focusIndex) Modifier.focusRequester(itemFocus) else Modifier)
                 val own = vm.imageUrl(item, 256)
                 val url = if (own == null && round) vm.artistCover(item, 256).collectAsStateWithLifecycle().value else own

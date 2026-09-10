@@ -1,10 +1,16 @@
 package io.github.superthom196.matv
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.media.MediaMetadata
 import android.media.VolumeProvider
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
+import android.os.Build
+import android.os.PowerManager
+import android.util.Log
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import kotlin.math.abs
@@ -16,16 +22,46 @@ import kotlinx.coroutines.launch
  * keep working when another app is in front and the TV's home screen can show a Now Playing card.
  * Lives as long as the activity; commands go straight to the ViewModel.
  *
+ * Transport commands that arrive while the TV's screen is off are dropped: see [fromStandby].
+ *
  * The session also claims remote volume, which is what makes the TV remote's volume rocker drive the
  * hi-fi instead of the TV's own speakers. The provider's scale is [TV_VOLUME_STEPS] notches, so a full
  * TV volume bar is 100% on the hi-fi and each press moves it by 100 / [TV_VOLUME_STEPS].
  */
 class PlaybackSession(context: Context, private val vm: AppViewModel, owner: LifecycleOwner) {
+    private val appContext = context.applicationContext
+    private val power = appContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+
+    // Whether the TV is awake. Kept by the broadcast rather than asked for on the spot, because the
+    // command and the screen going off are a few milliseconds apart and the order is not ours to
+    // choose; whichever lands first, this has already flipped by the time the other is handled.
+    private var awake = power.isInteractive
+    private val screenWatcher = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            awake = intent?.action == Intent.ACTION_SCREEN_ON
+        }
+    }
+
+    /**
+     * True when a transport command is the TV going to sleep rather than a person pressing a key.
+     *
+     * Putting the TV into standby makes the platform stop whatever holds the media session — sound
+     * from the box's own speakers should not outlive the picture. But this app is a controller: the
+     * music is coming out of a hi-fi across the room, and relaying that stop to it killed the album
+     * the moment the screen went dark, which is the opposite of what turning the TV off is for.
+     * A real remote press always arrives with the screen on, so the two are told apart by that.
+     */
+    private fun fromStandby(cmd: String): Boolean {
+        if (awake && power.isInteractive) return false
+        Log.i(TAG, "ignoring $cmd from the system: the TV is asleep, the hi-fi is not")
+        return true
+    }
+
     private val session = MediaSession(context, "MATV").apply {
         setCallback(object : MediaSession.Callback() {
             override fun onPlay() { vm.play() }
-            override fun onPause() { vm.pause() }
-            override fun onStop() { vm.stop() }
+            override fun onPause() { if (!fromStandby("pause")) vm.pause() }
+            override fun onStop() { if (!fromStandby("stop")) vm.stop() }
             override fun onSkipToNext() { vm.next() }
             override fun onSkipToPrevious() { vm.previous() }
         })
@@ -72,6 +108,14 @@ class PlaybackSession(context: Context, private val vm: AppViewModel, owner: Lif
     }
 
     init {
+        val screens = IntentFilter(Intent.ACTION_SCREEN_ON).apply { addAction(Intent.ACTION_SCREEN_OFF) }
+        // Both are protected system broadcasts, but from Android 13 a receiver still has to say
+        // out loud that it is not exported.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            appContext.registerReceiver(screenWatcher, screens, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            appContext.registerReceiver(screenWatcher, screens)
+        }
         session.setPlaybackToRemote(volumeProvider)
         owner.lifecycleScope.launch {
             // Metadata, volume and active-ness: none of these tick on their own, so this collector
@@ -122,5 +166,11 @@ class PlaybackSession(context: Context, private val vm: AppViewModel, owner: Lif
         }
     }
 
-    fun release() { session.isActive = false; session.release() }
+    fun release() {
+        runCatching { appContext.unregisterReceiver(screenWatcher) }
+        session.isActive = false
+        session.release()
+    }
+
+    private companion object { const val TAG = "MATV/session" }
 }
