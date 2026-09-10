@@ -8,6 +8,7 @@ import io.github.superthom196.matv.ma.ConnectionState
 import io.github.superthom196.matv.ma.DiscoveredServer
 import io.github.superthom196.matv.ma.ImageUrls
 import io.github.superthom196.matv.ma.MaAuthException
+import io.github.superthom196.matv.ma.MaException
 import io.github.superthom196.matv.ma.MaClient
 import io.github.superthom196.matv.ma.MaDiscovery
 import io.github.superthom196.matv.ma.MIN_SCHEMA_VERSION
@@ -622,9 +623,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun cmd(block: suspend () -> Unit) {
         // withPlayer routes through here too, so this one check covers every remote command.
-        if (!client.isConnected) { flash("Still connecting…"); return }
+        // A press during a reconnect (the link came back after standby, the server restarted) is
+        // held for a few seconds for the socket rather than thrown away; when nothing is trying
+        // to connect it fails at once.
         viewModelScope.launch {
-            try { block() } catch (e: Exception) {
+            if (!client.isConnected) {
+                val trying = when (val st = client.state.value) {
+                    is ConnectionState.Connecting, is ConnectionState.Reconnecting -> true
+                    is ConnectionState.Failed -> !st.fatal
+                    else -> false
+                }
+                try {
+                    client.awaitConnected(if (trying) 4_000 else 0)
+                } catch (e: MaException) {
+                    flash(if (trying) "Still connecting…" else "Not connected"); return@launch
+                }
+            }
+            try { block() } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 Log.w(TAG, "command failed: ${e.message}")
                 flash(e.message ?: "Command failed")
             }
@@ -637,9 +654,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun stop() = withPlayer { client.playerCmd("stop", it) }
     fun next() = withPlayer { client.playerCmd("next", it) }
     fun previous() = withPlayer { client.playerCmd("previous", it) }
-    fun volumeUp() = withPlayer { client.playerCmd("volume_up", it) }
-    fun volumeDown() = withPlayer { client.playerCmd("volume_down", it) }
-    fun setVolume(level: Int) {
+    // Any deliberate volume change ends a software mute: the level the user just chose is the
+    // level, not something for the next mute press to "restore" over.
+    fun volumeUp() { softMute = null; withPlayer { client.playerCmd("volume_up", it) } }
+    fun volumeDown() { softMute = null; withPlayer { client.playerCmd("volume_down", it) } }
+    fun setVolume(level: Int) { softMute = null; sendVolume(level) }
+
+    private fun sendVolume(level: Int) {
         flashVolumeHud(level, muted = false)
         withPlayer { client.playerCmd("volume_set", it, "volume_level" to level.coerceIn(0, 100)) }
     }
@@ -657,8 +678,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         hudJob = viewModelScope.launch { kotlinx.coroutines.delay(1800); _volumeHud.value = null }
     }
 
-    /** Level to come back to when a software mute is lifted; null when not software-muted. */
-    private var preMuteLevel: Int? = null
+    /**
+     * A software mute in force: the player it was applied to and the level to come back to.
+     * Null when not software-muted. Tied to the player so that switching to another hi-fi and
+     * pressing mute mutes it, rather than setting it to the first one's old level; and cleared by
+     * any volume change (see [setVolume]) so the next mute press mutes again.
+     */
+    private var softMute: Pair<String, Int>? = null
 
     /**
      * Mute / unmute the hi-fi. Players that advertise volume_mute get the real thing; the rest —
@@ -673,13 +699,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             withPlayer { client.playerCmd("volume_mute", it, "muted" to !muted) }
             return
         }
-        val restore = preMuteLevel
+        val restore = softMute?.takeIf { it.first == player.playerId }?.second
+        softMute = null
         if (restore != null) {
-            preMuteLevel = null
-            setVolume(restore)
+            sendVolume(restore)
         } else {
-            preMuteLevel = player.volumeLevel ?: 0
-            setVolume(0)
+            softMute = player.playerId to (player.volumeLevel ?: 0)
+            sendVolume(0)
             flashVolumeHud(0, muted = true)
         }
     }
