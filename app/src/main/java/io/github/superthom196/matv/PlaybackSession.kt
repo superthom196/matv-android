@@ -69,10 +69,14 @@ class PlaybackSession(context: Context, private val vm: AppViewModel, owner: Lif
 
     private val volumeProvider = object : VolumeProvider(VOLUME_CONTROL_ABSOLUTE, TV_VOLUME_STEPS, 0) {
         /** The TV asks for an absolute notch, e.g. when the user drags the system volume bar. */
-        override fun onSetVolumeTo(volume: Int) = sendVolume(volume)
+        override fun onSetVolumeTo(volume: Int) {
+            Log.d(TAG, "TV set volume to notch $volume (current $currentVolume)")
+            sendVolume(volume)
+        }
 
         /** One press of volume up / down on the remote. */
         override fun onAdjustVolume(direction: Int) {
+            Log.d(TAG, "TV adjust volume $direction (current $currentVolume)")
             if (direction != 0) sendVolume(currentVolume + direction)
         }
     }
@@ -80,6 +84,7 @@ class PlaybackSession(context: Context, private val vm: AppViewModel, owner: Lif
     /** Push a notch value to the hi-fi, and echo it back to the TV so its overlay tracks. */
     private fun sendVolume(notches: Int) {
         val clamped = notches.coerceIn(0, TV_VOLUME_STEPS)
+        Log.d(TAG, "session -> hi-fi ${clamped * 100 / TV_VOLUME_STEPS}")
         volumeProvider.currentVolume = clamped
         vm.setVolume(clamped * 100 / TV_VOLUME_STEPS)
     }
@@ -124,7 +129,10 @@ class PlaybackSession(context: Context, private val vm: AppViewModel, owner: Lif
                 // Follow the hi-fi: it also moves from the app's own volume row and other controllers.
                 val notches = ((ui.selectedPlayer?.volumeLevel ?: 0) * TV_VOLUME_STEPS + 50) / 100
                 val clamped = notches.coerceIn(0, TV_VOLUME_STEPS)
-                if (volumeProvider.currentVolume != clamped) volumeProvider.currentVolume = clamped
+                if (volumeProvider.currentVolume != clamped) {
+                    Log.d(TAG, "hi-fi at ${ui.selectedPlayer?.volumeLevel} -> notch $clamped (was ${volumeProvider.currentVolume})")
+                    volumeProvider.currentVolume = clamped
+                }
 
                 val np = ui.nowPlaying
                 val meta = lastMeta

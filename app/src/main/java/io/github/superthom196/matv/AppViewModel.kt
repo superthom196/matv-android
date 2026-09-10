@@ -661,6 +661,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setVolume(level: Int) { softMute = null; sendVolume(level) }
 
     private fun sendVolume(level: Int) {
+        Log.d(TAG, "volume_set $level")
         flashVolumeHud(level, muted = false)
         withPlayer { client.playerCmd("volume_set", it, "volume_level" to level.coerceIn(0, 100)) }
     }
@@ -717,6 +718,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun nudgeVolume(direction: Int) {
         val current = _ui.value.selectedPlayer?.volumeLevel ?: return
         val step = 100 / TV_VOLUME_STEPS
+        Log.d(TAG, "key nudge $direction from $current")
         setVolume((current + direction * step).coerceIn(0, 100))
     }
     fun toggleShuffle() {
