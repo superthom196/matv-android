@@ -11,7 +11,7 @@ plays on your existing Music Assistant endpoints.
 
 ![An album page: format under the artist and year, one action row, disc headers in the track list](docs/screenshots/album.png)
 
-![Now Playing: artwork, source format, progress and transport](docs/screenshots/now-playing.png)
+![Now Playing: artwork, source format, progress and transport, with the queue and visualiser one press away](docs/screenshots/now-playing.png)
 
 Shot on a Sony BRAVIA at 1920x1080.
 
