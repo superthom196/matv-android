@@ -136,7 +136,13 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
             .url("${base.trimEnd('/')}/auth/login")
             .post(payload.toString().toRequestBody("application/json".toMediaType()))
             .build()
-        http.newCall(req).execute().use { resp ->
+        // The shared client has no read timeout, which is right for the socket and wrong here: a
+        // login that never answers used to leave the Sign in button stuck at "Signing in…".
+        val client = http.newBuilder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .build()
+        client.newCall(req).execute().use { resp ->
             val body = resp.body.string()
             val el = runCatching { maJson.parseToJsonElement(body) }.getOrNull()
             val tok = el?.findStringDeep("token")
@@ -305,6 +311,12 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
 
     private val listener = object : WebSocketListener() {
         override fun onMessage(webSocket: WebSocket, text: String) {
+            // A frame this code cannot digest is dropped here; thrown out of the reader it would
+            // fail the whole socket and cost a reconnect.
+            runCatching { handleFrame(text) }.onFailure { Log.w(TAG, "bad frame dropped: ${it.message}") }
+        }
+
+        private fun handleFrame(text: String) {
             val el = runCatching { maJson.parseToJsonElement(text) }.getOrElse { return }
             val obj = el as? JsonObject ?: return
             when {

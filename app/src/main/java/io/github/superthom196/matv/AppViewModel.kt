@@ -274,6 +274,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // Jump straight to Main with what's saved instead of a Loading screen: server is set here so
         // serverId() resolves and the cached grids can draw at once, while the socket connects behind them.
         AuthHolder.token = cfg.token
+        AuthHolder.baseUrl = cfg.baseUrl
         _ui.update {
             it.copy(
                 phase = Phase.Main, baseUrl = cfg.baseUrl, username = cfg.username, selectedPlayerId = cfg.playerId,
@@ -358,11 +359,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun chooseServer(s: DiscoveredServer) {
         stopDiscovery()
-        _ui.update { it.copy(pendingServer = s, phase = Phase.Login, loginError = null) }
+        _ui.update { it.copy(pendingServer = s, phase = Phase.Login, loginError = null, loginBusy = false) }
     }
 
     fun backToConnect() {
-        _ui.update { it.copy(pendingServer = null, phase = Phase.Connect, loginError = null) }
+        _ui.update { it.copy(pendingServer = null, phase = Phase.Connect, loginError = null, loginBusy = false) }
         startDiscovery()
     }
 
@@ -411,6 +412,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             artistCovers.clear()
             artistCoverCache.clear()
             AuthHolder.token = null
+            AuthHolder.baseUrl = null
             _ui.value = UiState(phase = Phase.Connect)
             startDiscovery()
         }
@@ -420,6 +422,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun afterConnected(cfg: SavedConfig) {
         AuthHolder.token = cfg.token
+        AuthHolder.baseUrl = cfg.baseUrl
         // Reconnecting to the same server (the common case: a saved login, a dropped socket) should
         // leave a ready grid on screen and just refresh it behind the scenes; only a genuinely
         // different server needs everything wiped, since its albums/artists are not ours to show.

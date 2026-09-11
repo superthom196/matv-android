@@ -43,7 +43,8 @@ class MaDiscovery(private val context: Context, private val client: MaClient) {
      *   the usual reason for a scan on a TV is that it has just woken and the network is still coming up.
      */
     fun discover(knownHosts: List<String> = emptyList()): Flow<DiscoveredServer> = callbackFlow {
-        val seen = HashSet<String>()
+        // Hit from the known-host loop, the mDNS callbacks and 32 sweep coroutines at once.
+        val seen = java.util.Collections.synchronizedSet(HashSet<String>())
         fun offer(s: DiscoveredServer) {
             if (seen.add(s.info.serverId)) trySend(s)
         }

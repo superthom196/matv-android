@@ -3,13 +3,12 @@ package io.github.superthom196.matv.ma
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
 
 /**
  * Data shapes for the Music Assistant WebSocket API.
@@ -264,8 +263,9 @@ internal fun JsonElement.doubleOrNullValue(): Double? = (this as? JsonPrimitive)
 
 /** Library list results are a plain array on current servers, or `{items:[...]}` on older ones. */
 internal fun JsonElement.asItemArray(): List<JsonElement> = when (this) {
-    is JsonObject -> this["items"]?.jsonArray?.toList() ?: emptyList()
-    else -> jsonArray.toList()
+    is JsonObject -> (this["items"] as? JsonArray)?.toList() ?: emptyList()
+    is JsonArray -> toList()
+    else -> emptyList() // null or a bare value: nothing to list, not an error to put on screen
 }
 
 internal fun JsonElement.findStringDeep(key: String): String? {
