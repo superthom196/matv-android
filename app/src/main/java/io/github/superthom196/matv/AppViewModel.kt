@@ -449,7 +449,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 phase = Phase.Main, loginBusy = false, loginError = null, pendingServer = null,
                 baseUrl = cfg.baseUrl, username = cfg.username, server = client.serverInfo,
-                selectedPlayerId = it.selectedPlayerId ?: cfg.playerId, connectError = null, everConnected = true,
+                selectedPlayerId = if (sameServer) it.selectedPlayerId ?: cfg.playerId else null, connectError = null, everConnected = true,
             )
         }
         // Restore the artist-cover lookups saved for this server so borrowed covers show at once
@@ -465,10 +465,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val players = client.players()
             val qs = client.queues()
             queues.clear(); qs.forEach { queues[it.queueId] = it }
-            _ui.update { st ->
-                val sel = st.selectedPlayerId?.takeIf { id -> players.any { it.playerId == id } }
-                st.copy(players = players, selectedPlayerId = sel)
-            }
+            // The selection stays even when its player is not in this list: a server that has just
+            // restarted answers before its providers have registered the hi-fi, and dropping the id
+            // here left the remote's keys doing nothing until the player was chosen all over again.
+            // selectedPlayer simply reads null until it is back.
+            _ui.update { it.copy(players = players) }
             _ui.value.selectedPlayerId?.let { resolveActiveQueue(it) }
             recomputeNowPlaying()
         } catch (e: Exception) {
@@ -477,7 +478,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun onConnectionState(st: ConnectionState) {
-        _ui.update { it.copy(connection = st, server = client.serverInfo ?: it.server) }
+        // `server` is afterConnected's to set, once it has compared the new server with the one on
+        // screen; copying it in here first made that comparison always come out "same server".
+        _ui.update { it.copy(connection = st) }
         if (st is ConnectionState.Connected) {
             if (_ui.value.everConnected) {
                 // A *re*connect: the grids are already set up, just bring players and queues up to date.
