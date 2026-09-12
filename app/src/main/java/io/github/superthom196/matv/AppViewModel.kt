@@ -221,6 +221,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Folder browser stack; empty until the Folders tab is first opened. */
     val folders: StateFlow<List<FolderLevel>> = _folders.asStateFlow()
     private var nextFolderId = 1L
+    private var folderJob: Job? = null
     /** Last folder level whose first row was auto-focused (UI bookkeeping, survives tab switches). */
     var folderLevelAutoFocused: Long = -1L
 
@@ -294,6 +295,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _ui.update { it.copy(connectError = "Cannot reach ${cfg.serverName ?: cfg.baseUrl}: ${e.message}") }
                 client.reconnectInBackground(e.message ?: "unreachable")
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             // Server unreachable right now: stay on Main with the cached library already showing
             // (from the update above) instead of bouncing to the Connect screen. The client is
@@ -351,6 +354,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val info = withContext(Dispatchers.IO) { client.fetchInfo(base) }
                 chooseServer(DiscoveredServer(base, info, "manual"))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _ui.update { it.copy(connectError = "No Music Assistant at $base (${e.message})") }
             }
@@ -934,7 +939,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _ui.update { it.copy(connection = ConnectionState.Connecting) }
             // Success arrives as a Connected state (onConnectionState loads or refreshes); a failure
             // leaves the client retrying by itself, so only the message needs showing here.
-            try { client.connect(cfg.baseUrl!!, cfg.token!!, cfg.serverId) } catch (e: Exception) { flash(e.message ?: "Still unreachable") }
+            try {
+                client.connect(cfg.baseUrl!!, cfg.token!!, cfg.serverId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                flash(e.message ?: "Still unreachable")
+            }
         }
     }
 
@@ -969,19 +980,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // so the focused row is never yanked from under the D-pad mid-load.
         if (folder == null) _folders.value = listOf(level)
         _folderBusy.value = true
-        viewModelScope.launch {
+        // One load at a time. A Rescan while the root was still loading, or OK on a second folder
+        // before the first had opened, used to land both: out of order, or the same provider level
+        // pushed twice by the auto-descend below, so Back needed an extra press.
+        folderJob?.cancel()
+        folderJob = viewModelScope.launch {
             try {
                 val items = client.browse(folder?.path)
                 val sorted = items.sortedWith(compareBy({ it.name != ".." }, { !it.isFolder }, { (it.sortName ?: it.name).lowercase() }))
                 val loaded = level.copy(items = sorted, loading = false)
                 _folders.update { st -> if (folder == null) listOf(loaded) else st + loaded }
-                // A single provider at the root is the common case: skip straight into it.
+                // A single provider at the root is the common case: skip straight into it. That
+                // cancels the job this runs in, which is fine: nothing follows, and the finally
+                // below then leaves the busy flag to the load it has just started.
                 if (folder == null && sorted.size == 1 && sorted[0].isFolder) openFolder(sorted[0])
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val failed = level.copy(loading = false, error = e.message ?: "Failed to load")
                 _folders.update { st -> if (folder == null) listOf(failed) else st + failed }
             } finally {
-                _folderBusy.value = false
+                if (isActive) _folderBusy.value = false
             }
         }
     }

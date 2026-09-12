@@ -53,14 +53,16 @@ class RecentAlbums(
         if (!hadCache || page != showing) runCatching { persist?.invoke(page) }
     }
 
+    /** Fetch page 0 again; what is showing stays put until the new page is in hand and differs. */
     fun reload() {
         job?.cancel()
-        exhausted = false
-        _items.value = emptyList()
         job = scope.launch {
-            val page = runCatching { fetch(0, PAGE) }.getOrElse { emptyList() }
-            if (page.size < PAGE) exhausted = true
-            _items.value = page
+            // Offline: keep the shelf as it is. Emptying it first showed "Loading…" for a round trip
+            // and threw a focused card's focus to the tab bar, and a fetch that then failed left it
+            // empty and marked exhausted, so nothing filled it again.
+            val page = runCatching { fetch(0, PAGE) }.getOrNull() ?: return@launch
+            exhausted = page.size < PAGE
+            if (page != _items.value) _items.value = page
             runCatching { persist?.invoke(page) }
         }
     }

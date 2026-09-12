@@ -113,11 +113,13 @@ class AlbumIndex(
                 // cancellation as a failure put "<Job> was cancelled" on screen in red at every launch.
                 throw e
             } catch (e: Exception) {
-                if (shown == null) {
+                if (shown == null && !cur.ready) {
                     _state.update { it.copy(loading = false, error = e.message ?: "Failed to load albums") }
                 } else {
-                    // Server refresh failed but the cached list is already on screen: stay quiet and usable,
-                    // and keep trying behind the scenes in case it was a blip.
+                    // Server refresh failed but a list is already on screen (the cache just read, or
+                    // the one this reload was refreshing): stay quiet and usable, and keep trying
+                    // behind the scenes in case it was a blip. `cur` matters: a retry reads no cache,
+                    // so on `shown` alone the 30/60/120 s ladder stopped after its first rung.
                     _state.update { it.copy(loading = false) }
                     scheduleRetry(e.message)
                 }
