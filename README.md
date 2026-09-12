@@ -142,15 +142,20 @@ With neither the secrets nor that file, nothing changes: release builds stay deb
 - **Folders**: the folder tree of your collection, as Music Assistant's Browse page shows it.
   OK on a folder opens it, Back goes up a level. OK on a track plays that track and the rest of the folder.
 - **Favourites**: your favourite artists, albums, tracks and playlists.
-- **Playlists** and **Radio** tabs can be switched on in Settings.
+- **Genres**: the genres your own albums carry, biggest first, read off their tracks by a background
+  scan (the server's genre list only lends the artwork). OK opens a genre's albums.
+- **Playlists** and **Radio** tabs can be switched on in Settings; any tab can be switched off there.
 - **Search** (magnifier in the header): artists, albums, tracks, playlists and radio in your library.
 - **Long-press OK** on anything playable for Play now / Play next / Add to queue / Shuffle / Favourite.
+- **Now Playing**: artwork, what is actually streaming (codec, bit depth, rate, a HI-RES mark), transport,
+  shuffle and repeat toggles, and a progress bar that seeks 15 s per Left/Right press while it has focus.
 - **Queue** (from Now Playing): what the selected player has queued, current track highlighted. OK jumps to
   a track; long-press to move it up or down or remove it; Clear empties the queue.
 - **Media keys** on the remote work on every screen, and the app registers a media session so they keep
   working while another app is in front.
 - **Settings** (gear in the header): the players Music Assistant has found (OK selects, long-press syncs or
-  unsyncs), default tab, optional tabs, server and version info, sign out.
+  unsyncs), a rescan of the library, the hi-res scan's progress, the library cache, default tab, which tabs
+  show, server and version info, sign out.
 
 ## Layout
 

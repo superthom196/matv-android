@@ -30,5 +30,4 @@ Connect (discovery + manual) → Login (once) → Pick player → Library (artis
 folders, drill-down) → Now Playing (artwork, transport, progress, volume) → media keys
 live on every screen.
 
-Not yet implemented: search, queue editing, favourites, multi-server, LMS/Subsonic
-support, HA OAuth login, background MediaSession.
+Not yet implemented: multi-server, LMS/Subsonic support, HA OAuth login.

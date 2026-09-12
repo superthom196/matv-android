@@ -69,8 +69,8 @@ there, `adb logcat -s MaClient AppViewModel MaDiscovery` around the wake will sa
 
 ## 3. Up from the left column of the album grid lands on the Artists tab
 
-**Reported:** 2026-09-08 · **Severity:** medium · **Status:** fixed in the working tree
-and installed on the TV — **not yet verified by hand**
+**Reported:** 2026-09-08 · **Severity:** medium · **Status:** fixed in v1.0.1 and
+installed on the TV — **not yet verified by hand**
 
 From a tile in the leftmost column of the Albums grid, pressing Up generally jumps focus
 out to the **Artists** tab instead of moving into the Random or Latest shelf above. Not
@@ -104,8 +104,7 @@ time, and whether it returns to the card you came down from.
 
 ## 2. Long album names should scroll when the tile is selected
 
-**Reported:** 2026-09-08 · **Severity:** low · **Status:** done — in the working tree,
-uncommitted; the release build now on the TV has it
+**Reported:** 2026-09-08 · **Severity:** low · **Status:** done in v1.0.1, on the TV
 
 An album name too long for its column ellipsizes and there is no way to read the rest of
 it without opening the album. It should marquee-scroll while the tile is focused.
@@ -123,7 +122,7 @@ should loop while focused or run a few passes and stop.
 ## 1. TV standby stops Music Assistant playback
 
 **Reported:** 2026-09-08 · **Severity:** high · **Status:** fixed and verified on the
-Bravia; in the working tree, uncommitted
+Bravia, in v1.0.1
 
 Queue an album, put the TV into standby, and the music stops. The whole point of a
 controller app is that the hi-fi keeps playing once the screen is off — the TV is not

@@ -36,6 +36,9 @@ jobs:
           kotlin.compiler.execution.strategy=in-process
           EOF
 
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest
+
       - name: Assemble the release build
         run: ./gradlew assembleRelease
 
