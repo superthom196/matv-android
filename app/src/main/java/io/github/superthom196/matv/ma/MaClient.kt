@@ -9,6 +9,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +19,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -76,9 +79,12 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
 
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JsonElement>>()
     private val nextId = AtomicLong(1)
-    private var socket: WebSocket? = null
-    private var serverInfoDeferred: CompletableDeferred<ServerInfo>? = null
+    // Written on Main (a direct connect) and on IO (the supervisor), read on OkHttp's threads.
+    @Volatile private var socket: WebSocket? = null
+    @Volatile private var serverInfoDeferred: CompletableDeferred<ServerInfo>? = null
     private var connectJob: Job? = null
+    /** Serialises every handshake, whether from [connect] or the supervisor: see [connect]. */
+    private val handshake = Mutex()
 
     /** Credentials the reconnect loop needs: base URL + a bearer token. */
     private var baseUrl: String? = null
@@ -166,27 +172,45 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
      * nothing retrying, since the same token would only be rejected again.
      */
     suspend fun connect(base: String, token: String, expectedServerId: String?) {
-        this.baseUrl = base.trimEnd('/')
-        this.token = token
-        this.expectedServerId = expectedServerId
+        val b = base.trimEnd('/')
+        // Whatever is retrying stops first, so a supervisor mid-handshake lets go of the lock at once.
         connectJob?.cancel()
-        connectJob = null
-        _state.value = ConnectionState.Connecting
-        try {
-            openAndAuth()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: MaAuthException) {
-            val cur = _state.value
-            if (!(cur is ConnectionState.Failed && cur.fatal)) _state.value = ConnectionState.Failed(e.message ?: "auth failed", fatal = true)
-            throw e
-        } catch (e: Exception) {
-            val reason = e.message ?: "unreachable"
-            _state.value = ConnectionState.Failed(reason, fatal = false)
-            connectJob = scope.launch { supervise(reason) }
-            throw e
+        // One handshake at a time. Two connects in flight together (Retry pressed again while the
+        // first was still waiting for the server, a login submitted twice) each opened a socket;
+        // the second cancelled the first's, whose failure then failed the identity check in the
+        // listener, so the first timed out and started a supervisor of its own beside the second's.
+        // Those orphans lived until the app was killed, and on every later drop each one
+        // reconnected and cancelled the others' healthy sockets.
+        handshake.withLock {
+            if (_state.value is ConnectionState.Connected && b == baseUrl && token == this.token &&
+                expectedServerId == this.expectedServerId && connectJob?.isActive == true
+            ) return // the connect that held the lock before us did this exact job
+            connectJob?.cancel() // one that earlier connect's failure path launched while we waited
+            connectJob = null
+            this.baseUrl = b
+            this.token = token
+            this.expectedServerId = expectedServerId
+            _state.value = ConnectionState.Connecting
+            closed.tryReceive() // a drop of the socket this call is replacing is not news
+            try {
+                openAndAuth()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: MaAuthException) {
+                val cur = _state.value
+                if (!(cur is ConnectionState.Failed && cur.fatal)) _state.value = ConnectionState.Failed(e.message ?: "auth failed", fatal = true)
+                throw e
+            } catch (e: Exception) {
+                // disconnect() ran while this handshake was in flight (the user forgot the server):
+                // nothing must retry, or a supervisor would reconnect to a server that is gone.
+                if (_state.value is ConnectionState.Disconnected) throw e
+                val reason = e.message ?: "unreachable"
+                _state.value = ConnectionState.Failed(reason, fatal = false)
+                connectJob = scope.launch { supervise(reason) }
+                throw e
+            }
+            connectJob = scope.launch { supervise() }
         }
-        connectJob = scope.launch { supervise() }
     }
 
     /**
@@ -209,7 +233,14 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
         _state.value = ConnectionState.Disconnected
     }
 
-    private val closed = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    /**
+     * The socket dropping. A conflated channel, not a flow: a drop that lands before the supervisor
+     * is back at [Channel.receive] (the server going away right after it answered `auth`, before
+     * the launch that starts the supervisor has even been dispatched) has to still be there when
+     * it looks. A flow with no subscriber threw it away, and the state then stayed Connected on a
+     * dead socket: every send failed and nothing ever reconnected.
+     */
+    private val closed = Channel<String>(Channel.CONFLATED)
 
     /**
      * Waits for the socket to drop, then reconnects with backoff until it succeeds. With
@@ -219,7 +250,7 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
     private suspend fun supervise(initialReason: String? = null) {
         var pendingReason = initialReason
         while (true) {
-            val reason = pendingReason ?: closed.first()
+            val reason = pendingReason ?: closed.receive()
             pendingReason = null
             var attempt = 0
             var delayMs = 1000L
@@ -228,7 +259,7 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
                 _state.value = ConnectionState.Reconnecting(attempt, reason)
                 try {
                     delay(delayMs)
-                    openAndAuth()
+                    handshake.withLock { openAndAuth() }
                     break
                 } catch (e: CancellationException) {
                     // A cancelled supervisor must stop, not spin: delay() throws this on every
@@ -348,13 +379,13 @@ class MaClient(private val http: OkHttpClient = defaultHttp()) {
             Log.w(TAG, "socket failure: ${t.message}")
             serverInfoDeferred?.completeExceptionally(t)
             failAllPending(t.message ?: "socket failure")
-            if (_state.value is ConnectionState.Connected) closed.tryEmit(t.message ?: "connection lost")
+            if (_state.value is ConnectionState.Connected) closed.trySend(t.message ?: "connection lost")
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
             if (webSocket !== socket) return
             failAllPending("closed")
-            if (_state.value is ConnectionState.Connected) closed.tryEmit("closed ($code)")
+            if (_state.value is ConnectionState.Connected) closed.trySend("closed ($code)")
         }
     }
 
