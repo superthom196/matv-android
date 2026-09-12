@@ -371,9 +371,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun login(username: String, password: String) {
         val s = _ui.value.pendingServer ?: return
+        // OK on the password field and on the button can both fire for one press: the second must
+        // not sign in again, which minted a second ten-year token and tangled two connects.
+        if (_ui.value.loginBusy) return
         if (username.isBlank() || password.isBlank()) { _ui.update { it.copy(loginError = "Enter your Music Assistant username and password") }; return }
         _ui.update { it.copy(loginBusy = true, loginError = null) }
         viewModelScope.launch {
+            var saved = false
             try {
                 val sessionToken = withContext(Dispatchers.IO) { client.loginHttp(s.baseUrl, username, password) }
                 client.connect(s.baseUrl, sessionToken, s.info.serverId)
@@ -381,13 +385,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val longLived = client.createLongLivedToken("MATV (${android.os.Build.MODEL})")
                 val token = longLived ?: sessionToken
                 prefs.saveServer(s.baseUrl, token, s.info.serverId, s.info.name, username)
+                saved = true
                 if (longLived != null) {
                     // Re-open with the long-lived token so the running session already uses it.
                     client.connect(s.baseUrl, token, s.info.serverId)
                 }
                 afterConnected(prefs.current())
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "login failed", e)
+                // The client keeps retrying after a transport failure. Once the login is saved that
+                // is right (the second connect only swaps tokens); before it, the retry would land
+                // later with nothing saved and drop the user from this screen onto an empty Main.
+                if (!saved) client.disconnect()
                 _ui.update { it.copy(loginBusy = false, loginError = e.message ?: "Login failed") }
             }
         }
